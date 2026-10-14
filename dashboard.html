@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
-
+    <link rel="icon" href="./images-removebg-preview.png">
    <style>
     :root {
         --dark: #20251f;
@@ -651,6 +651,11 @@
         box-shadow: 0 20px 70px rgba(0, 0, 0, 0.2);
     }
 
+    .record-dialog.measurement-dialog {
+        width: min(900px, calc(100% - 28px));
+        max-height: min(92vh, 1000px);
+    }
+
     .record-dialog::backdrop {
         background: rgba(16, 18, 15, 0.55);
     }
@@ -680,6 +685,56 @@
         overflow-y: auto;
     }
 
+    .dialog-fields.measurement-dialog-fields {
+        max-height: min(68vh, 720px);
+        gap: 20px;
+        padding: 2px 4px 2px 0;
+    }
+
+    .measurement-meta-grid,
+    .measurement-input-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .measurement-dialog-section {
+        min-width: 0;
+        padding: 18px;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+    }
+
+    .measurement-dialog-section h3 {
+        margin-bottom: 15px;
+        font-family: "Playfair Display", serif;
+        font-size: 19px;
+        font-weight: 600;
+    }
+
+    .measurement-customer-name {
+        display: flex;
+        align-items: center;
+        min-height: 42px;
+        padding: 9px 12px;
+        color: var(--dark);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        font-size: 13px;
+    }
+
+    .measurement-dialog-fields .dialog-field input,
+    .measurement-dialog-fields .dialog-field select {
+        min-width: 0;
+        min-height: 46px;
+    }
+
+    .measurement-dialog-fields .measurement-notes-field textarea {
+        min-height: 110px;
+    }
+
     .dialog-field {
         display: grid;
         gap: 7px;
@@ -700,6 +755,21 @@
     .dialog-field textarea {
         min-height: 85px;
         resize: vertical;
+    }
+
+    @media (max-width: 580px) {
+        .measurement-meta-grid,
+        .measurement-input-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .measurement-dialog-section {
+            padding: 15px;
+        }
+
+        .dialog-fields.measurement-dialog-fields {
+            max-height: 65vh;
+        }
     }
 
     .dialog-actions {
@@ -915,7 +985,7 @@
                     <div><h2 id="customer-profile-name">Customer profile</h2><p class="subtitle" id="customer-profile-subtitle"></p></div>
                     <div class="profile-actions">
                         <button class="secondary-button" type="button" data-action="profile-edit-customer">Edit customer</button>
-                        <button class="primary-button" type="button" data-action="profile-add-measurement">Add measurement</button>
+                        <button class="primary-button" type="button" data-action="profile-add-measurement">Record measurements</button>
                         <button class="primary-button" type="button" data-action="profile-add-order">New sewing order</button>
                     </div>
                 </div>
@@ -959,7 +1029,7 @@
 
         <section class="view-panel" id="view-measurements" data-title="Measurements" data-subtitle="Keep every fitting linked to the right customer." hidden>
             <section class="section">
-                <div class="section-heading"><h2>Measurement records</h2><button class="primary-button" type="button" data-action="add-measurement">Add measurement</button></div>
+                <div class="section-heading"><h2>Measurement records</h2><button class="primary-button" type="button" data-action="add-measurement">Record measurements</button></div>
                 <label class="search-label" for="measurement-customer-filter">Customer</label>
                 <select class="search-input" id="measurement-customer-filter"><option value="">All customers</option></select>
                 <datalist id="measurement-name-suggestions">

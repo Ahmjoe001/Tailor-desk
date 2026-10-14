@@ -1,6 +1,59 @@
 // TailorDesk frontend: authentication and the authenticated workspace.
 const THEME_STORAGE_KEY = "tailordesk-theme";
 const ORDER_STATUSES = ["pending", "in_progress", "completed", "collected", "cancelled"];
+const MEASUREMENT_SECTIONS = [
+    {
+        title: "Upper body",
+        fields: [
+            ["neck", "Neck"],
+            ["chest_bust", "Chest/Bust"],
+            ["shoulder_width", "Shoulder width"],
+            ["shoulder_to_bust", "Shoulder to bust"],
+            ["shoulder_to_underbust", "Shoulder to underbust"],
+            ["shoulder_to_waist", "Shoulder to waist"],
+            ["front_length", "Front length"],
+            ["back_length", "Back length"],
+            ["armhole", "Armhole"],
+            ["sleeve_length", "Sleeve length"],
+            ["upper_arm_bicep", "Upper arm/Bicep"],
+            ["elbow", "Elbow"],
+            ["wrist", "Wrist"],
+            ["across_chest", "Across chest"],
+            ["across_back", "Across back"]
+        ]
+    },
+    {
+        title: "Lower body",
+        fields: [
+            ["waist", "Waist"],
+            ["hip", "Hip"],
+            ["waist_to_hip", "Waist to hip"],
+            ["thigh", "Thigh"],
+            ["knee", "Knee"],
+            ["calf", "Calf"],
+            ["trouser_length", "Trouser length"],
+            ["inseam", "Inseam"],
+            ["outseam", "Outseam"],
+            ["crotch_length", "Crotch length"],
+            ["leg_opening", "Leg opening"],
+            ["rise", "Rise"]
+        ]
+    },
+    {
+        title: "Dress and gown",
+        fields: [
+            ["full_length", "Full length"],
+            ["shoulder_to_knee", "Shoulder to knee"],
+            ["shoulder_to_floor", "Shoulder to floor"],
+            ["bust_point_distance", "Bust point distance"],
+            ["underbust", "Underbust"],
+            ["dress_waist", "Dress waist"],
+            ["dress_hip", "Dress hip"],
+            ["skirt_length", "Skirt length"],
+            ["other_measurements", "Other measurements"]
+        ]
+    }
+];
 
 function applyTheme(theme) {
     const selectedTheme = theme === "dark" ? "dark" : "light";
@@ -14,6 +67,34 @@ function applyTheme(theme) {
         button.querySelector(".theme-icon").textContent = icon;
         button.querySelector(".theme-label").textContent = label;
     });
+}
+
+function legacyMeasurementKey(name) {
+    const normalizedName = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const aliases = {
+        chest: "chest_bust",
+        bust: "chest_bust",
+        hips: "hip",
+        shoulder: "shoulder_width",
+        bicep: "upper_arm_bicep",
+        "upper arm": "upper_arm_bicep",
+        "trouser waist": "waist"
+    };
+    if (aliases[normalizedName]) return aliases[normalizedName];
+    for (const section of MEASUREMENT_SECTIONS) {
+        const match = section.fields.find(([, label]) =>
+            label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === normalizedName
+        );
+        if (match) return match[0];
+    }
+    return null;
+}
+
+function measurementUnitCode(value) {
+    const rawUnit = String(value || "cm").trim().toLowerCase();
+    if (["in", "inch", "inches"].includes(rawUnit)) return "in";
+    if (["cm", "centimeter", "centimeters", "centimetre", "centimetres"].includes(rawUnit)) return "cm";
+    return null;
 }
 
 applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "light");
@@ -199,7 +280,15 @@ async function startDashboard() {
     }
     await verifyTailorProfile(data.user.id);
 
-    const state = { user: data.user, customers: [], measurements: [], orders: [], payments: [] };
+    const state = {
+        user: data.user,
+        customers: [],
+        measurements: [],
+        measurementSets: [],
+        measurementSetsAvailable: true,
+        orders: [],
+        payments: []
+    };
     const customerMap = new Map();
     const orderMap = new Map();
     const dialog = document.querySelector("#record-dialog");
@@ -235,7 +324,12 @@ async function startDashboard() {
     });
 
     document.querySelectorAll('button[data-action^="add-"]').forEach((button) => {
-        button.addEventListener("click", () => openRecordDialog(button.dataset.action).catch(showWorkspaceError));
+        button.addEventListener("click", () => {
+            const customerId = button.dataset.action === "add-measurement"
+                ? document.querySelector("#measurement-customer-filter").value
+                : null;
+            openRecordDialog(button.dataset.action, null, customerId).catch(showWorkspaceError);
+        });
     });
     document.querySelector("#dialog-close").addEventListener("click", () => dialog.close());
     document.querySelector("#dialog-cancel").addEventListener("click", () => dialog.close());
@@ -285,17 +379,31 @@ async function startDashboard() {
 
     async function loadWorkspace() {
         setWorkspaceMessage("Loading your workspace...");
-        const [customersResult, measurementsResult, ordersResult] = await Promise.all([
+        const [customersResult, measurementsResult, measurementSetsResult, ordersResult] = await Promise.all([
             supabaseClient.from("customers").select("id,tailor_id,full_name,phone,address,notes,material_received_date,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
             supabaseClient.from("measurements").select("id,tailor_id,customer_id,measurement_name,measurement_value,unit,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
+            supabaseClient.from("customer_measurement_sets").select("customer_id,tailor_id,measurements,unit,notes,updated_at").eq("tailor_id", state.user.id),
             supabaseClient.from("orders").select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,notes,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false })
         ]);
+        const measurementSetError = measurementSetsResult.error;
+        const measurementSetErrorText = String(measurementSetError?.message || "").toLowerCase();
+        if (measurementSetError &&
+            (measurementSetError.code === "42P01" ||
+                (measurementSetErrorText.includes("customer_measurement_sets") &&
+                    (measurementSetErrorText.includes("does not exist") ||
+                        measurementSetErrorText.includes("could not find") ||
+                        measurementSetErrorText.includes("schema cache"))))) {
+            state.measurementSetsAvailable = false;
+        } else if (measurementSetError) {
+            throw measurementSetError;
+        }
         for (const result of [customersResult, measurementsResult, ordersResult]) {
             if (result.error) throw result.error;
         }
 
         state.customers = customersResult.data || [];
         state.measurements = measurementsResult.data || [];
+        state.measurementSets = measurementSetsResult.data || [];
         state.orders = ordersResult.data || [];
         customerMap.clear();
         orderMap.clear();
@@ -320,7 +428,9 @@ async function startDashboard() {
         }
 
         renderAll();
-        setWorkspaceMessage("");
+        setWorkspaceMessage(state.measurementSetsAvailable
+            ? ""
+            : "Full measurement sets are not installed yet. Apply measurement-sets-schema.sql to enable the complete form; your existing workspace remains available.");
     }
 
     function renderAll() {
@@ -376,16 +486,58 @@ async function startDashboard() {
         const rows = state.measurements.filter((measurement) => !customerId || measurement.customer_id === customerId);
         const body = document.querySelector("#measurements-table");
         body.replaceChildren();
-        rows.forEach((measurement) => {
-            const row = document.createElement("tr");
-            appendCell(row, customerMap.get(measurement.customer_id)?.full_name || "Unknown customer");
-            appendCell(row, measurement.measurement_name);
-            appendCell(row, measurement.measurement_value);
-            appendCell(row, measurement.unit);
-            appendActions(row, measurement.id, ["edit-measurement", "delete-measurement"]);
-            body.append(row);
+        const measurementSets = state.measurementSets.filter((set) => !customerId || set.customer_id === customerId);
+        appendMeasurementSetRows(measurementSets, body, true);
+        rows.forEach((measurement) => appendLegacyMeasurementRow(measurement, body, true));
+        showEmpty("#measurements-empty", rows.length === 0 && measurementSets.length === 0);
+    }
+
+    function appendLegacyMeasurementRow(measurement, body, includeCustomer) {
+        const set = getMeasurementSet(measurement.customer_id);
+        const key = legacyMeasurementKey(measurement.measurement_name);
+        const currentValue = key ? set?.measurements?.[key] : null;
+        const sameUnit = set && measurementUnitCode(set.unit) === measurementUnitCode(measurement.unit);
+        if (currentValue !== null && currentValue !== undefined && currentValue !== "" &&
+            Number(currentValue) === Number(measurement.measurement_value) && sameUnit) {
+            return;
+        }
+
+        const row = document.createElement("tr");
+        if (includeCustomer) appendCell(row, customerMap.get(measurement.customer_id)?.full_name || "Unknown customer");
+        appendCell(row, set && key ? `Previous ${measurement.measurement_name}` : measurement.measurement_name);
+        appendCell(row, measurement.measurement_value);
+        appendCell(row, measurement.unit);
+        appendActions(row, measurement.id, ["edit-measurement", "delete-measurement"]);
+        body.append(row);
+    }
+
+    function appendMeasurementSetRows(measurementSets, body, includeCustomer) {
+        measurementSets.forEach((set) => {
+            let hasValues = false;
+            MEASUREMENT_SECTIONS.forEach((section) => {
+                section.fields.forEach(([key, label]) => {
+                    const value = set.measurements?.[key];
+                    if (value === null || value === undefined || value === "") return;
+                    hasValues = true;
+                    const row = document.createElement("tr");
+                    if (includeCustomer) appendCell(row, customerMap.get(set.customer_id)?.full_name || "Unknown customer");
+                    appendCell(row, label);
+                    appendCell(row, value);
+                    appendCell(row, set.unit);
+                    appendActions(row, set.customer_id, ["edit-measurement-set"]);
+                    body.append(row);
+                });
+            });
+            if (set.notes) {
+                const row = document.createElement("tr");
+                if (includeCustomer) appendCell(row, customerMap.get(set.customer_id)?.full_name || "Unknown customer");
+                appendCell(row, "Fitting notes");
+                appendCell(row, set.notes);
+                appendCell(row, "");
+                appendActions(row, set.customer_id, ["edit-measurement-set"]);
+                body.append(row);
+            }
         });
-        showEmpty("#measurements-empty", rows.length === 0);
     }
 
     function renderOrders() {
@@ -461,17 +613,12 @@ async function startDashboard() {
         });
 
         const measurements = state.measurements.filter((item) => item.customer_id === customer.id);
+        const measurementSets = state.measurementSets.filter((set) => set.customer_id === customer.id);
         const measurementBody = document.querySelector("#profile-measurements");
         measurementBody.replaceChildren();
-        measurements.forEach((measurement) => {
-            const row = document.createElement("tr");
-            appendCell(row, measurement.measurement_name);
-            appendCell(row, measurement.measurement_value);
-            appendCell(row, measurement.unit);
-            appendActions(row, measurement.id, ["edit-measurement", "delete-measurement"]);
-            measurementBody.append(row);
-        });
-        showEmpty("#profile-measurements-empty", measurements.length === 0);
+        appendMeasurementSetRows(measurementSets, measurementBody, false);
+        measurements.forEach((measurement) => appendLegacyMeasurementRow(measurement, measurementBody, false));
+        showEmpty("#profile-measurements-empty", measurements.length === 0 && measurementSets.length === 0);
 
         const orders = state.orders.filter((item) => item.customer_id === customer.id);
         const orderList = document.querySelector("#profile-orders");
@@ -611,6 +758,7 @@ async function startDashboard() {
                 "edit-customer": "Edit",
                 "edit-order": "Edit",
                 "edit-measurement": "Edit",
+                "edit-measurement-set": "Edit set",
                 "delete-customer": "Delete",
                 "delete-order": "Delete",
                 "delete-measurement": "Delete"
@@ -714,8 +862,143 @@ async function startDashboard() {
         return [];
     }
 
+    function getMeasurementSet(customerId) {
+        return state.measurementSets.find((set) => set.customer_id === customerId) || null;
+    }
+
+    function getLegacyMeasurementSet(customerId) {
+        const measurements = {};
+        let unit = "cm";
+        let firstUnit = null;
+        state.measurements
+            .filter((measurement) => measurement.customer_id === customerId)
+            .forEach((measurement) => {
+                const key = legacyMeasurementKey(measurement.measurement_name);
+                const measurementUnit = measurementUnitCode(measurement.unit);
+                if (key && measurementUnit && measurements[key] === undefined) {
+                    const value = Number(measurement.measurement_value);
+                    if (!Number.isFinite(value) || value <= 0) return;
+                    if (firstUnit && firstUnit !== measurementUnit) return;
+                    firstUnit = measurementUnit;
+                    unit = measurementUnit;
+                    measurements[key] = value;
+                }
+            });
+        return { customer_id: customerId, measurements, unit, notes: "" };
+    }
+
+    function appendMeasurementSetForm(customerId, measurementSet) {
+        const meta = document.createElement("div");
+        meta.className = "measurement-meta-grid";
+        const customerWrapper = document.createElement("div");
+        customerWrapper.className = "dialog-field";
+        const customerLabel = document.createElement("label");
+        customerLabel.textContent = "Customer";
+        customerWrapper.append(customerLabel);
+        if (customerId) {
+            const customer = customerMap.get(customerId);
+            const customerDisplay = document.createElement("span");
+            customerDisplay.className = "measurement-customer-name";
+            customerDisplay.textContent = customer?.full_name || "Selected customer";
+            const hiddenCustomer = document.createElement("input");
+            hiddenCustomer.type = "hidden";
+            hiddenCustomer.name = "customer_id";
+            hiddenCustomer.value = customerId;
+            customerWrapper.append(customerDisplay, hiddenCustomer);
+        } else {
+            const select = document.createElement("select");
+            select.id = "record-customer_id";
+            select.name = "customer_id";
+            select.required = true;
+            customerLabel.htmlFor = select.id;
+            select.append(makeOption("", "Select customer"));
+            customerOptions().forEach((option) => select.append(makeOption(option.value, option.label)));
+            if (customerId) select.value = customerId;
+            select.addEventListener("change", () => {
+                const selectedSet = getMeasurementSet(select.value) || getLegacyMeasurementSet(select.value);
+                applyMeasurementSetToForm(selectedSet);
+            });
+            customerWrapper.append(select);
+        }
+        const unitWrapper = document.createElement("div");
+        unitWrapper.className = "dialog-field";
+        const unitLabel = document.createElement("label");
+        unitLabel.htmlFor = "record-unit";
+        unitLabel.textContent = "Measurement unit";
+        const unitSelect = document.createElement("select");
+        unitSelect.id = "record-unit";
+        unitSelect.name = "unit";
+        unitSelect.append(makeOption("cm", "Centimetres (cm)"), makeOption("in", "Inches (in)"));
+        unitSelect.value = measurementSet?.unit === "in" ? "in" : "cm";
+        unitWrapper.append(unitLabel, unitSelect);
+        meta.append(customerWrapper, unitWrapper);
+        dialogFields.append(meta);
+
+        MEASUREMENT_SECTIONS.forEach((section) => {
+            const sectionElement = document.createElement("section");
+            sectionElement.className = "measurement-dialog-section";
+            const heading = document.createElement("h3");
+            heading.textContent = section.title;
+            const grid = document.createElement("div");
+            grid.className = "measurement-input-grid";
+            section.fields.forEach(([key, labelText]) => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "dialog-field";
+                const label = document.createElement("label");
+                label.htmlFor = `record-${key}`;
+                label.textContent = labelText;
+                const input = document.createElement("input");
+                input.id = label.htmlFor;
+                input.name = key;
+                input.type = "number";
+                input.inputMode = "decimal";
+                input.min = "0.01";
+                input.step = "any";
+                input.placeholder = "Optional";
+                input.value = measurementSet?.measurements?.[key] ?? "";
+                wrapper.append(label, input);
+                grid.append(wrapper);
+            });
+            sectionElement.append(heading, grid);
+            dialogFields.append(sectionElement);
+        });
+
+        const notesWrapper = document.createElement("div");
+        notesWrapper.className = "dialog-field measurement-notes-field";
+        const notesLabel = document.createElement("label");
+        notesLabel.htmlFor = "record-notes";
+        notesLabel.textContent = "Special fitting instructions and custom measurements";
+        const notes = document.createElement("textarea");
+        notes.id = notesLabel.htmlFor;
+        notes.name = "notes";
+        notes.rows = 4;
+        notes.placeholder = "Add fitting instructions or describe any custom measurements";
+        notes.value = measurementSet?.notes || "";
+        notesWrapper.append(notesLabel, notes);
+        dialogFields.append(notesWrapper);
+    }
+
+    function applyMeasurementSetToForm(measurementSet) {
+        if (!measurementSet) return;
+        const unit = document.querySelector("#record-unit");
+        if (unit) unit.value = measurementSet.unit === "in" ? "in" : "cm";
+        MEASUREMENT_SECTIONS.forEach((section) => {
+            section.fields.forEach(([key]) => {
+                const input = document.querySelector(`#record-${key}`);
+                if (input) input.value = measurementSet.measurements?.[key] ?? "";
+            });
+        });
+        const notes = document.querySelector("#record-notes");
+        if (notes) notes.value = measurementSet.notes || "";
+    }
+
     async function openRecordDialog(operation, recordId, presetCustomerId, presetOrderId) {
-        if (operation === "add-measurement" && state.customers.length === 0) {
+        const isMeasurementSetOperation = operation === "edit-measurement-set" ||
+            (operation === "add-measurement" && state.measurementSetsAvailable);
+        if (operation === "add-measurement" && !state.measurementSetsAvailable) {
+            setWorkspaceMessage("The full measurement form requires measurement-sets-schema.sql. You can still add a single legacy measurement until the migration is applied.");
+        }
+        if (isMeasurementSetOperation && state.customers.length === 0) {
             setWorkspaceMessage("Add a customer before recording measurements.", true);
             showView("customers");
             return;
@@ -730,10 +1013,18 @@ async function startDashboard() {
             return;
         }
 
-        const recordType = operation.split("-").at(-1);
+        const recordType = isMeasurementSetOperation ? "measurement" : operation.split("-").at(-1);
         const source = recordType === "customer" ? state.customers
             : recordType === "measurement" ? state.measurements : state.orders;
-        const record = recordId ? source.find((item) => item.id === recordId) : null;
+        const record = isMeasurementSetOperation
+            ? getMeasurementSet(recordId || presetCustomerId || document.querySelector("#measurement-customer-filter").value)
+            : recordId ? source.find((item) => item.id === recordId) : null;
+        const formCustomerId = isMeasurementSetOperation
+            ? record?.customer_id || recordId || presetCustomerId || ""
+            : presetCustomerId;
+        const measurementSet = isMeasurementSetOperation
+            ? record || (formCustomerId ? getLegacyMeasurementSet(formCustomerId) : null)
+            : null;
         if (operation === "view-customer") {
             selectedCustomerId = recordId;
             await renderCustomerProfile();
@@ -745,15 +1036,28 @@ async function startDashboard() {
             return;
         }
 
-        currentOperation = { name: operation, record };
+        currentOperation = {
+            name: isMeasurementSetOperation ? "save-measurement-set" : operation,
+            record
+        };
         recordForm.reset();
         dialogFields.replaceChildren();
         document.querySelector("#dialog-message").textContent = "";
-        document.querySelector("#dialog-title").textContent =
-            `${record ? "Edit" : "Add"} ${recordType === "payment" ? "payment" : recordType}`;
+        document.querySelector("#dialog-title").textContent = isMeasurementSetOperation
+            ? "Full customer measurements"
+            : `${record ? "Edit" : "Add"} ${recordType === "payment" ? "payment" : recordType}`;
         document.querySelector("#dialog-submit").disabled = false;
         document.querySelector("#dialog-submit").hidden = false;
 
+        if (isMeasurementSetOperation) {
+            document.querySelector("#record-dialog").classList.add("measurement-dialog");
+            dialogFields.classList.add("measurement-dialog-fields");
+            appendMeasurementSetForm(formCustomerId, measurementSet);
+            dialog.showModal();
+            return;
+        }
+        document.querySelector("#record-dialog").classList.remove("measurement-dialog");
+        dialogFields.classList.remove("measurement-dialog-fields");
         fieldsFor(operation, record, presetCustomerId, presetOrderId).forEach((field) => {
             const wrapper = document.createElement("div");
             wrapper.className = "dialog-field";
@@ -798,6 +1102,8 @@ async function startDashboard() {
 
     async function showOrderDetails(order) {
         if (!order) return;
+        document.querySelector("#record-dialog").classList.remove("measurement-dialog");
+        dialogFields.classList.remove("measurement-dialog-fields");
         dialogFields.replaceChildren();
         document.querySelector("#dialog-title").textContent = "Order details";
         document.querySelector("#dialog-message").textContent = "";
@@ -889,6 +1195,35 @@ async function startDashboard() {
                     p_method: values.method || null
                 });
                 if (error) throw error;
+            } else if (operation === "save-measurement-set") {
+                if (!values.customer_id || !customerMap.has(values.customer_id)) {
+                    throw new Error("Choose a customer before saving measurements.");
+                }
+                const measurements = {};
+                for (const section of MEASUREMENT_SECTIONS) {
+                    for (const [key, label] of section.fields) {
+                        const value = String(values[key] || "").trim();
+                        if (!value) continue;
+                        const numericValue = Number(value);
+                        if (!Number.isFinite(numericValue) || numericValue <= 0) {
+                            throw new Error(`${label} must be a positive number or left blank.`);
+                        }
+                        measurements[key] = numericValue;
+                    }
+                }
+                const { data, error } = await supabaseClient.from("customer_measurement_sets")
+                    .upsert({
+                        customer_id: values.customer_id,
+                        tailor_id: state.user.id,
+                        measurements,
+                        unit: values.unit === "in" ? "in" : "cm",
+                        notes: String(values.notes || "").trim() || null,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: "customer_id" })
+                    .select("customer_id")
+                    .single();
+                if (error) throw error;
+                if (!data) throw new Error("No measurement set was saved. Check that you can access this customer.");
             } else {
                 const table = operation.endsWith("customer") ? "customers"
                     : operation.endsWith("measurement") ? "measurements" : "orders";
