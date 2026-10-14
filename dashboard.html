@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TailorDesk | Dashboard</title>
+    <script>
+        (() => {
+            const theme = localStorage.getItem("tailordesk-theme") || "light";
+            document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+
+   <style>
+    :root {
+        --dark: #20251f;
+        --dark-soft: #2b3129;
+        --sidebar-bg: #20251f;
+        --sidebar-text: #ffffff;
+        --gold: #c6a46a;
+        --gold-light: #e2c995;
+        --cream: #f7f6f2;
+        --white: #ffffff;
+        --muted: #777b74;
+        --border: #e9e5dc;
+        --shadow: 0 8px 28px rgba(32, 37, 31, 0.045);
+        --radius: 16px;
+        color-scheme: light;
+    }
+
+    :root[data-theme="dark"] {
+        --dark: #f0eee8;
+        --dark-soft: #d6c9aa;
+        --sidebar-bg: #111510;
+        --sidebar-text: #f7f6f2;
+        --gold: #d6b879;
+        --gold-light: #eed8a6;
+        --cream: #171b17;
+        --white: #222822;
+        --muted: #b1b4aa;
+        --border: #3b4239;
+        --shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+        color-scheme: dark;
+    }
+
+    :root[data-theme="dark"] .workspace-message,
+    :root[data-theme="dark"] .inline-notice {
+        color: #e2c995;
+    }
+
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    html {
+        scroll-behavior: smooth;
+    }
+
+    body {
+        font-family: "DM Sans", sans-serif;
+        background: var(--cream);
+        color: var(--dark);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    input {
+        font: inherit;
+    }
+
+    /* SIDEBAR */
+
+    .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        width: 260px;
+        padding: 34px 22px;
+        overflow-y: auto;
+        background: var(--sidebar-bg);
+        color: var(--sidebar-text);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .brand {
+        font-family: "Playfair Display", serif;
+        font-size: 29px;
+        font-weight: 600;
+        letter-spacing: -0.8px;
+        margin-bottom: 48px;
+        white-space: nowrap;
+    }
+
+    .gold {
+        color: var(--gold);
+    }
+
+    .nav-label {
+        margin: 10px 0 16px 12px;
+        color: #a7aa9f;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 2px;
+    }
+
+    .nav-item {
+        display: flex;
+        align-items: center;
+        min-height: 48px;
+        padding: 13px 15px;
+        margin-bottom: 7px;
+        color: #dedfd9;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        transition:
+            background 0.2s ease,
+            color 0.2s ease,
+            border-color 0.2s ease,
+            transform 0.2s ease;
+    }
+
+    .nav-item:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--white);
+        transform: translateX(2px);
+    }
+
+    .nav-item.active {
+        background: rgba(198, 164, 106, 0.12);
+        color: var(--gold-light);
+        border-color: rgba(198, 164, 106, 0.2);
+        box-shadow: inset 3px 0 0 var(--gold);
+    }
+
+    .logout {
+        margin-top: auto;
+        padding: 12px 15px;
+        background: transparent;
+        color: #e9e9e3;
+        border: 1px solid #50564c;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: left;
+        transition: all 0.2s ease;
+    }
+
+    .logout:hover {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: var(--gold);
+        color: var(--gold-light);
+    }
+
+    /* MAIN CONTENT */
+
+    .main {
+        min-height: 100vh;
+        margin-left: 260px;
+        padding: 42px;
+        max-width: 1800px;
+    }
+
+    .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+        margin-bottom: 38px;
+    }
+
+    .topbar-tools {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .theme-toggle {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 10px 14px;
+        color: var(--dark);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        font-size: 12px;
+        font-weight: 600;
+        transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .theme-toggle:hover {
+        border-color: var(--gold);
+        transform: translateY(-1px);
+    }
+
+    .theme-icon {
+        font-size: 16px;
+        line-height: 1;
+    }
+
+    h1 {
+        font-family: "Playfair Display", serif;
+        font-size: clamp(28px, 3vw, 39px);
+        line-height: 1.25;
+        font-weight: 600;
+        letter-spacing: -0.8px;
+    }
+
+    .subtitle {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+    }
+
+    .profile {
+        max-width: 100%;
+        padding: 12px 17px;
+        overflow-wrap: anywhere;
+        background: var(--white);
+        color: var(--dark);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 3px 12px rgba(32, 37, 31, 0.025);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    /* DASHBOARD STATISTICS */
+
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px;
+    }
+
+    .card {
+        position: relative;
+        min-width: 0;
+        padding: 27px;
+        overflow: hidden;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease,
+            border-color 0.2s ease;
+    }
+
+    .card::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 4px;
+        height: 0;
+        background: var(--gold);
+        transition: height 0.25s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-3px);
+        border-color: #ded1b9;
+        box-shadow: 0 14px 34px rgba(32, 37, 31, 0.075);
+    }
+
+    .card:hover::after {
+        height: 100%;
+    }
+
+    .card-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+    }
+
+    .card-number {
+        margin-top: 18px;
+        color: var(--dark);
+        font-family: "Playfair Display", serif;
+        font-size: clamp(30px, 3vw, 40px);
+        line-height: 1.2;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    /* WORKSPACE SECTION */
+
+    .section {
+        margin-top: 30px;
+        padding: 30px;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+    }
+
+    .section h2 {
+        font-family: "Playfair Display", serif;
+        font-size: 25px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+    }
+
+    .empty {
+        padding: 55px 15px;
+        color: var(--muted);
+        text-align: center;
+        line-height: 1.9;
+        font-size: 13px;
+    }
+
+    .empty p:first-child {
+        margin-bottom: 5px;
+        color: var(--dark);
+        font-size: 15px;
+        font-weight: 600;
+    }
+
+    /* TABLETS */
+
+    @media (max-width: 1100px) {
+        .sidebar {
+            width: 225px;
+            padding: 28px 17px;
+        }
+
+        .brand {
+            font-size: 26px;
+        }
+
+        .main {
+            margin-left: 225px;
+            padding: 30px 25px;
+        }
+
+        .stats {
+            gap: 14px;
+        }
+
+        .card {
+            padding: 21px;
+        }
+
+        .topbar {
+            align-items: flex-start;
+        }
+
+        .profile {
+            max-width: 220px;
+        }
+    }
+
+    /* PHONES AND SMALL TABLETS */
+
+    @media (max-width: 800px) {
+        .sidebar {
+            position: relative;
+            width: 100%;
+            padding: 20px;
+            overflow: visible;
+        }
+
+        .brand {
+            margin-bottom: 18px;
+            font-size: 27px;
+        }
+
+        .nav-label {
+            margin: 12px 0;
+        }
+
+        .sidebar nav {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scrollbar-width: thin;
+        }
+
+        .nav-item {
+            flex: 0 0 auto;
+            min-height: 42px;
+            padding: 10px 13px;
+            margin: 0;
+            font-size: 12px;
+        }
+
+        .nav-item:hover {
+            transform: none;
+        }
+
+        .logout {
+            margin-top: 12px;
+            align-self: flex-start;
+        }
+
+        .main {
+            min-height: auto;
+            margin-left: 0;
+            padding: 26px 20px;
+        }
+
+        .topbar {
+            flex-direction: column;
+            gap: 17px;
+            margin-bottom: 26px;
+        }
+
+        .topbar-tools {
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        h1 {
+            font-size: clamp(27px, 6vw, 35px);
+        }
+
+        .profile {
+            max-width: 100%;
+            padding: 10px 13px;
+        }
+
+        .stats {
+            grid-template-columns: 1fr;
+            gap: 13px;
+        }
+
+        .card {
+            padding: 23px;
+        }
+
+        .card-number {
+            margin-top: 12px;
+            font-size: 34px;
+        }
+
+        .section {
+            margin-top: 22px;
+            padding: 23px 19px;
+        }
+
+        .section h2 {
+            font-size: 23px;
+        }
+
+        .empty {
+            padding: 38px 5px;
+        }
+    }
+
+    /* VERY SMALL PHONES */
+
+    @media (max-width: 380px) {
+        .sidebar {
+            padding: 17px 14px;
+        }
+
+        .brand {
+            font-size: 24px;
+        }
+
+        .main {
+            padding: 22px 14px;
+        }
+
+        .card {
+            padding: 19px;
+        }
+
+        .section {
+            padding: 20px 15px;
+        }
+    }
+
+    /* REDUCED MOTION ACCESSIBILITY */
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+
+    [hidden] {
+        display: none !important;
+    }
+
+    .workspace-message,
+    .inline-notice {
+        margin: 0 0 18px;
+        color: #8a5a22;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .workspace-message:empty,
+    .inline-notice:empty {
+        display: none;
+    }
+
+    .section-heading,
+    .filter-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+
+    .section-heading {
+        margin-bottom: 22px;
+    }
+
+    .section-heading h2 {
+        margin-right: auto;
+    }
+
+    .primary-button,
+    .secondary-button,
+    .action-button {
+        min-height: 40px;
+        padding: 9px 15px;
+        border-radius: 9px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .primary-button {
+        color: var(--white);
+        background: var(--dark);
+        border: 1px solid var(--dark);
+    }
+
+    .primary-button:hover {
+        background: var(--dark-soft);
+    }
+
+    .secondary-button,
+    .action-button {
+        color: var(--dark);
+        background: var(--white);
+        border: 1px solid var(--border);
+    }
+
+    .action-button {
+        min-height: 32px;
+        padding: 6px 10px;
+        margin: 2px 4px 2px 0;
+        font-size: 11px;
+    }
+
+    .action-button.danger {
+        color: #a2372b;
+    }
+
+    .search-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .search-input,
+    .dialog-field input,
+    .dialog-field select,
+    .dialog-field textarea {
+        min-width: 180px;
+        min-height: 42px;
+        padding: 9px 12px;
+        color: var(--dark);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        font-size: 13px;
+    }
+
+    .filter-row .search-input {
+        flex: 1 1 200px;
+    }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 12px;
+    }
+
+    th,
+    td {
+        padding: 13px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    th {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+
+    td {
+        color: var(--dark);
+    }
+
+    .table-empty {
+        padding: 28px 10px;
+    }
+
+    .record-dialog {
+        width: min(520px, calc(100% - 28px));
+        max-height: min(85vh, 760px);
+        padding: 25px;
+        color: var(--dark);
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 20px 70px rgba(0, 0, 0, 0.2);
+    }
+
+    .record-dialog::backdrop {
+        background: rgba(16, 18, 15, 0.55);
+    }
+
+    .record-dialog .section-heading {
+        margin-bottom: 20px;
+    }
+
+    .record-dialog .section-heading h2 {
+        font-size: 23px;
+    }
+
+    .close-button {
+        width: 35px;
+        height: 35px;
+        color: var(--muted);
+        background: transparent;
+        border: 0;
+        font-size: 26px;
+        line-height: 1;
+    }
+
+    .dialog-fields {
+        display: grid;
+        gap: 15px;
+        max-height: 55vh;
+        overflow-y: auto;
+    }
+
+    .dialog-field {
+        display: grid;
+        gap: 7px;
+    }
+
+    .dialog-field label {
+        color: var(--dark);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .dialog-field input,
+    .dialog-field select,
+    .dialog-field textarea {
+        width: 100%;
+    }
+
+    .dialog-field textarea {
+        min-height: 85px;
+        resize: vertical;
+    }
+
+    .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .profile-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .customer-profile-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px;
+        margin-bottom: 28px;
+    }
+
+    .customer-profile-details div {
+        padding: 14px;
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow-wrap: anywhere;
+    }
+
+    .customer-profile-details dt {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.7px;
+        text-transform: uppercase;
+    }
+
+    .customer-profile-details dd {
+        margin-top: 5px;
+        color: var(--dark);
+        font-size: 13px;
+        white-space: pre-wrap;
+    }
+
+    .profile-columns {
+        display: grid;
+        gap: 26px;
+    }
+
+    .profile-columns h3 {
+        margin-bottom: 12px;
+        font-family: "Playfair Display", serif;
+        font-size: 19px;
+    }
+
+    .profile-order-list {
+        display: grid;
+        gap: 14px;
+    }
+
+    .profile-order-card {
+        padding: 17px;
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+    }
+
+    .profile-order-card h4 {
+        margin-bottom: 7px;
+        font-size: 15px;
+    }
+
+    .profile-order-card p {
+        margin: 4px 0;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: pre-wrap;
+    }
+
+    .order-images {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    .order-image {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 10px;
+    }
+
+    .order-image img {
+        width: 118px;
+        height: 118px;
+        object-fit: cover;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--white);
+    }
+
+    .upload-help {
+        color: var(--muted);
+        font-size: 11px;
+    }
+
+    .status-pill {
+        display: inline-block;
+        padding: 4px 9px;
+        color: #66502a;
+        background: #f4eddf;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+    }
+
+    @media (max-width: 800px) {
+        .sidebar nav {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .sidebar nav .nav-item {
+            flex: 0 0 auto;
+        }
+
+        .profile-actions {
+            width: 100%;
+        }
+
+        .profile-columns {
+            gap: 20px;
+        }
+    }
+</style>
+
+</head>
+
+<body>
+    <aside class="sidebar">
+        <div class="brand">✂ Tailor<span class="gold">Desk</span></div>
+        <p class="nav-label">WORKSPACE</p>
+        <nav aria-label="Workspace">
+            <a href="#overview" class="nav-item active" data-view="overview">Overview</a>
+            <a href="#customers" class="nav-item" data-view="customers">Customers</a>
+            <a href="#orders" class="nav-item" data-view="orders">Orders</a>
+            <a href="#measurements" class="nav-item" data-view="measurements">Measurements</a>
+            <a href="#payments" class="nav-item" data-view="payments">Payments</a>
+        </nav>
+        <button class="logout" id="logout-button" type="button">Sign Out ↗</button>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1 id="page-title">Welcome to TailorDesk<span class="gold">.</span></h1>
+                <p class="subtitle" id="page-subtitle">Your tailoring business, organised in one place.</p>
+            </div>
+            <div class="topbar-tools">
+                <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to dark mode" aria-pressed="false">
+                    <span class="theme-icon" aria-hidden="true">🌙</span><span class="theme-label">Dark mode</span>
+                </button>
+                <div class="profile" id="profile-email">Loading account...</div>
+            </div>
+        </header>
+
+        <p id="workspace-message" class="workspace-message" role="status" aria-live="polite"></p>
+
+        <section class="view-panel" id="view-overview" data-title="Welcome to TailorDesk." data-subtitle="Your tailoring business, organised in one place.">
+            <div class="stats">
+                <article class="card">
+                    <p class="card-label">Total Customers</p>
+                    <p class="card-number" id="stat-customers">—</p>
+                </article>
+                <article class="card">
+                    <p class="card-label">Active Orders</p>
+                    <p class="card-number" id="stat-orders">—</p>
+                </article>
+                <article class="card">
+                    <p class="card-label">Outstanding Balances</p>
+                    <p class="card-number" id="stat-balance">—</p>
+                </article>
+            </div>
+            <section class="section">
+                <h2>Recent orders</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Customer</th><th>Style</th><th>Order date</th><th>Collection</th><th>Status</th></tr></thead>
+                        <tbody id="recent-orders"></tbody>
+                    </table>
+                </div>
+                <p class="empty table-empty" id="recent-orders-empty">No orders yet. Add an order when you are ready.</p>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-customers" data-title="Customers" data-subtitle="Keep your customer details accurate and close at hand." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Customer records</h2><button class="primary-button" type="button" data-action="add-customer">Add customer</button></div>
+                <label class="search-label" for="customer-search">Search by name or phone</label>
+                <input class="search-input" id="customer-search" type="search" placeholder="Search customers">
+                <div class="table-wrap"><table>
+                    <thead><tr><th>Name</th><th>Phone</th><th>Address</th><th>Material received</th><th>Notes</th><th>Actions</th></tr></thead>
+                    <tbody id="customers-table"></tbody>
+                </table></div>
+                <p class="empty table-empty" id="customers-empty">No customers found.</p>
+            </section>
+            <section class="section customer-profile" id="customer-profile" hidden>
+                <div class="section-heading">
+                    <div><h2 id="customer-profile-name">Customer profile</h2><p class="subtitle" id="customer-profile-subtitle"></p></div>
+                    <div class="profile-actions">
+                        <button class="secondary-button" type="button" data-action="profile-edit-customer">Edit customer</button>
+                        <button class="primary-button" type="button" data-action="profile-add-measurement">Add measurement</button>
+                        <button class="primary-button" type="button" data-action="profile-add-order">New sewing order</button>
+                    </div>
+                </div>
+                <dl class="customer-profile-details" id="customer-profile-details"></dl>
+                <div class="profile-columns">
+                    <section>
+                        <h3>Measurements</h3>
+                        <div class="table-wrap"><table><thead><tr><th>Measurement</th><th>Value</th><th>Unit</th><th>Actions</th></tr></thead><tbody id="profile-measurements"></tbody></table></div>
+                        <p class="empty table-empty" id="profile-measurements-empty">No measurements saved.</p>
+                    </section>
+                    <section>
+                        <h3>Sewing orders</h3>
+                        <div id="profile-orders" class="profile-order-list"></div>
+                        <p class="empty table-empty" id="profile-orders-empty">No sewing orders saved.</p>
+                    </section>
+                    <section>
+                        <h3>Payment records</h3>
+                        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Order</th><th>Method</th><th>Amount</th></tr></thead><tbody id="profile-payments"></tbody></table></div>
+                        <p class="empty table-empty" id="profile-payments-empty">No payments recorded.</p>
+                    </section>
+                </div>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-orders" data-title="Orders" data-subtitle="Track each garment from the first fitting to collection." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Order book</h2><button class="primary-button" type="button" data-action="add-order">Create order</button></div>
+                <div class="filter-row">
+                    <label class="search-label" for="order-search">Search orders</label>
+                    <input class="search-input" id="order-search" type="search" placeholder="Customer or clothing style">
+                    <label class="search-label" for="order-status-filter">Status</label>
+                    <select class="search-input" id="order-status-filter"><option value="">All statuses</option></select>
+                </div>
+                <div class="table-wrap"><table>
+                    <thead><tr><th>Customer</th><th>Clothing / style</th><th>Material received</th><th>Order date</th><th>Collection date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="orders-table"></tbody>
+                </table></div>
+                <p class="empty table-empty" id="orders-empty">No orders found.</p>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-measurements" data-title="Measurements" data-subtitle="Keep every fitting linked to the right customer." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Measurement records</h2><button class="primary-button" type="button" data-action="add-measurement">Add measurement</button></div>
+                <label class="search-label" for="measurement-customer-filter">Customer</label>
+                <select class="search-input" id="measurement-customer-filter"><option value="">All customers</option></select>
+                <datalist id="measurement-name-suggestions">
+                    <option value="Chest"></option><option value="Waist"></option><option value="Hips"></option>
+                    <option value="Shoulder"></option><option value="Sleeve length"></option>
+                    <option value="Shirt length"></option><option value="Trouser waist"></option><option value="Trouser length"></option>
+                </datalist>
+                <div class="table-wrap"><table>
+                    <thead><tr><th>Customer</th><th>Measurement</th><th>Value</th><th>Unit</th><th>Actions</th></tr></thead>
+                    <tbody id="measurements-table"></tbody>
+                </table></div>
+                <p class="empty table-empty" id="measurements-empty">No measurements found.</p>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-payments" data-title="Payments" data-subtitle="Record payments and review payment history by order." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Payment history</h2><button class="primary-button" type="button" data-action="add-payment">Record payment</button></div>
+                <p id="payments-notice" class="inline-notice" hidden></p>
+                <div class="table-wrap"><table>
+                    <thead><tr><th>Payment date</th><th>Customer</th><th>Order</th><th>Method</th><th>Amount</th></tr></thead>
+                    <tbody id="payments-table"></tbody>
+                </table></div>
+                <p class="empty table-empty" id="payments-empty">No payments recorded yet.</p>
+            </section>
+        </section>
+    </main>
+
+    <dialog id="record-dialog" class="record-dialog">
+        <form id="record-form" method="dialog">
+            <div class="section-heading"><h2 id="dialog-title">Add record</h2><button type="button" class="close-button" id="dialog-close" aria-label="Close">×</button></div>
+            <div id="dialog-fields" class="dialog-fields"></div>
+            <p id="dialog-message" class="inline-notice" role="status" aria-live="polite"></p>
+            <div class="dialog-actions"><button type="button" class="secondary-button" id="dialog-cancel">Cancel</button><button type="submit" class="primary-button" id="dialog-submit">Save</button></div>
+        </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js" defer></script>
+</body>
+</html>

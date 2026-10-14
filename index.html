@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TailorDesk | Your Tailoring Business</title>
+    <script>
+        (() => {
+            const theme = localStorage.getItem("tailordesk-theme") || "light";
+            document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js" defer></script>
+</head>
+
+<body>
+
+    <main class="page">
+
+        <!-- LEFT SIDE: BRANDING -->
+
+        <section class="brand-panel">
+
+            <a href="index.html" class="brand">
+                <span class="brand-icon">✂</span>
+                <span>Tailor<span class="gold-text">Desk</span></span>
+            </a>
+
+            <div class="brand-content">
+
+                <p class="eyebrow">YOUR CRAFT. YOUR BUSINESS.</p>
+
+                <h1>
+                    Every detail<br>
+                    tells a story<span class="gold-text">.</span>
+                </h1>
+
+                <p class="brand-description">
+                    Manage your customers, measurements and orders
+                    with confidence. Spend less time on records and
+                    more time creating exceptional clothing.
+                </p>
+
+                <div class="features">
+
+                    <div class="feature">
+                        <span class="feature-icon">01</span>
+                        <div>
+                            <h3>Customer Records</h3>
+                            <p>Keep every customer organised.</p>
+                        </div>
+                    </div>
+
+                    <div class="feature">
+                        <span class="feature-icon">02</span>
+                        <div>
+                            <h3>Orders & Measurements</h3>
+                            <p>Keep every detail in one place.</p>
+                        </div>
+                    </div>
+
+                    <div class="feature">
+                        <span class="feature-icon">03</span>
+                        <div>
+                            <h3>Payments & Balances</h3>
+                            <p>Stay on top of your business.</p>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="brand-footer">
+                <span>CRAFTED FOR TAILORS</span>
+                <span>EST. WITH PURPOSE</span>
+            </div>
+
+        </section>
+
+
+        <!-- RIGHT SIDE: LOGIN FORM -->
+
+        <section class="login-panel">
+
+            <div class="login-top">
+                <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to dark mode" aria-pressed="false">
+                    <span class="theme-icon" aria-hidden="true">🌙</span><span class="theme-label">Dark mode</span>
+                </button>
+                <span class="secure-label">
+                    <span class="status-dot"></span>
+                    YOUR WORKSPACE
+                </span>
+            </div>
+
+            <div class="login-card">
+
+                <div class="welcome-icon">✂</div>
+
+                <p class="eyebrow">WELCOME BACK</p>
+
+                <h2>Good to see you.</h2>
+
+                <p class="login-description">
+                    Sign in to manage your tailoring business.
+                </p>
+
+                <form id="login-form">
+
+                    <div class="form-group">
+                        <label for="email">Email address</label>
+
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            placeholder="you@example.com"
+                            autocomplete="username"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+
+                        <div class="label-row">
+                            <label for="password">Password</label>
+
+                            <button
+                                type="button"
+                                id="toggle-password"
+                                class="text-button"
+                            >
+                                Show
+                            </button>
+                        </div>
+
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Enter your password"
+                            autocomplete="current-password"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-options">
+
+                        <label class="remember-option">
+                            <input type="checkbox" id="remember">
+                            <span>Remember me</span>
+                        </label>
+
+                        <button
+                            type="button"
+                            id="forgot-password"
+                            class="text-button"
+                        >
+                            Forgot password?
+                        </button>
+
+                    </div>
+
+                    <button type="submit" class="login-button">
+                        <span>Sign In</span>
+                        <span class="button-arrow">→</span>
+                    </button>
+
+                    <p id="login-message" class="login-message"
+                       role="status" aria-live="polite"></p>
+
+                </form>
+
+                <form id="recovery-form" hidden>
+                    <p class="login-description">Choose a new password for your TailorDesk account.</p>
+                    <div class="form-group">
+                        <label for="new-password">New password</label>
+                        <input type="password" id="new-password" autocomplete="new-password" minlength="8" required>
+                    </div>
+                    <p id="recovery-message" class="login-message" role="status" aria-live="polite"></p>
+                    <button type="submit" class="login-button">
+                        <span>Update Password</span>
+                        <span class="button-arrow">→</span>
+                    </button>
+                </form>
+
+                <div class="login-divider">
+                    <span></span>
+                    <p>YOUR BUSINESS, SIMPLIFIED</p>
+                    <span></span>
+                </div>
+
+                <p class="help-text">
+                    Having trouble signing in? Contact your administrator for help.
+                </p>
+
+            </div>
+
+            <div class="login-footer">
+                <span>© 2026 TailorDesk</span>
+                <span>Made for your craft.</span>
+            </div>
+
+        </section>
+
+    </main>
+
+</body>
+</html>
