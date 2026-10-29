@@ -445,6 +445,13 @@ a:focus-visible {
     line-height: 1.6;
 }
 
+.signup-prompt {
+    margin-top: 10px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 12px;
+}
+
 :root[data-theme="dark"] .welcome-icon {
     color: var(--gold-light);
 }

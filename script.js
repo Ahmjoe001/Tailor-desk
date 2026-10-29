@@ -6,11 +6,13 @@ const MEASUREMENT_SECTIONS = [
         title: "Upper body",
         fields: [
             ["neck", "Neck"],
+            ["upper_chest", "Upper chest"],
             ["chest_bust", "Chest/Bust"],
             ["shoulder_width", "Shoulder width"],
             ["shoulder_to_bust", "Shoulder to bust"],
             ["shoulder_to_underbust", "Shoulder to underbust"],
             ["shoulder_to_waist", "Shoulder to waist"],
+            ["top_length", "Top length"],
             ["front_length", "Front length"],
             ["back_length", "Back length"],
             ["armhole", "Armhole"],
@@ -26,6 +28,7 @@ const MEASUREMENT_SECTIONS = [
         title: "Lower body",
         fields: [
             ["waist", "Waist"],
+            ["trouser_waist", "Trouser waist"],
             ["hip", "Hip"],
             ["waist_to_hip", "Waist to hip"],
             ["thigh", "Thigh"],
@@ -35,6 +38,7 @@ const MEASUREMENT_SECTIONS = [
             ["inseam", "Inseam"],
             ["outseam", "Outseam"],
             ["crotch_length", "Crotch length"],
+            ["crotch_depth", "Crotch depth"],
             ["leg_opening", "Leg opening"],
             ["rise", "Rise"]
         ]
@@ -49,6 +53,8 @@ const MEASUREMENT_SECTIONS = [
             ["underbust", "Underbust"],
             ["dress_waist", "Dress waist"],
             ["dress_hip", "Dress hip"],
+            ["dress_length", "Dress length"],
+            ["jacket_length", "Jacket length"],
             ["skirt_length", "Skirt length"],
             ["other_measurements", "Other measurements"]
         ]
@@ -155,6 +161,20 @@ if (loginForm) {
     const rememberCheckbox = document.querySelector("#remember");
     const togglePasswordButton = document.querySelector("#toggle-password");
     const forgotPasswordButton = document.querySelector("#forgot-password");
+    const signupButton = document.querySelector("#signup-button");
+    const signupNameField = document.querySelector("#signup-name-field");
+    const signupNameInput = document.querySelector("#signup-name");
+    let isSigningUp = false;
+
+    signupButton?.addEventListener("click", () => {
+        isSigningUp = !isSigningUp;
+        signupNameField.hidden = !isSigningUp;
+        signupNameInput.required = isSigningUp;
+        signupButton.textContent = isSigningUp ? "Back to sign in" : "Create a tailor account";
+        loginForm.querySelector('button[type="submit"] span:first-child').textContent = isSigningUp ? "Create Account" : "Sign In";
+        showLoginMessage(isSigningUp ? "Enter your name, email, and password to create your tailor account." : "");
+        if (isSigningUp) signupNameInput.focus();
+    });
 
     togglePasswordButton?.addEventListener("click", () => {
         const isHidden = passwordInput.type === "password";
@@ -172,14 +192,31 @@ if (loginForm) {
         const submitButton = loginForm.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         window.localStorage.setItem("tailordesk-remember-session", String(rememberCheckbox.checked));
-        showLoginMessage("Signing you in...");
+        showLoginMessage(isSigningUp ? "Creating your tailor account..." : "Signing you in...");
         try {
-            const { error } = await supabaseClient.auth.signInWithPassword({
-                email: emailInput.value.trim(),
-                password: passwordInput.value
-            });
+            const result = isSigningUp
+                ? await supabaseClient.auth.signUp({
+                    email: emailInput.value.trim(),
+                    password: passwordInput.value,
+                    options: { data: { full_name: signupNameInput.value.trim() } }
+                })
+                : await supabaseClient.auth.signInWithPassword({
+                    email: emailInput.value.trim(),
+                    password: passwordInput.value
+                });
+            const { data, error } = result;
             if (error) throw error;
-            window.location.href = "dashboard.html";
+            if (isSigningUp && !data.session) {
+                showLoginMessage("Account created. Check your email to confirm it, then sign in.");
+                isSigningUp = false;
+                signupNameField.hidden = true;
+                signupNameInput.required = false;
+                signupButton.textContent = "Create a tailor account";
+                submitButton.querySelector("span:first-child").textContent = "Sign In";
+            } else {
+                if (isSigningUp) showLoginMessage("Account created. Opening your workspace...");
+                window.location.href = "dashboard.html";
+            }
         } catch (error) {
             showLoginMessage(error.message || "Unable to sign in. Please try again.", true);
         } finally {
@@ -250,6 +287,15 @@ if (loginForm) {
     }
 }
 
+if (loginForm && supabaseClient && !window.location.hash.includes("type=recovery")) {
+    supabaseClient.auth.getUser().then(({ data, error }) => {
+        if (error && error.name !== "AuthSessionMissingError") throw error;
+        if (data.user) window.location.replace("dashboard.html");
+    }).catch((error) => {
+        showLoginMessage(error.message || "Unable to check your sign-in session.", true);
+    });
+}
+
 if (dashboard) {
     startDashboard().catch((error) => {
         setWorkspaceMessage(error.message || "Unable to load your workspace.", true);
@@ -279,6 +325,9 @@ async function startDashboard() {
         return;
     }
     await verifyTailorProfile(data.user.id);
+    supabaseClient.auth.onAuthStateChange((event) => {
+        if (event === "SIGNED_OUT") window.location.replace("index.html");
+    });
 
     const state = {
         user: data.user,
@@ -287,14 +336,17 @@ async function startDashboard() {
         measurementSets: [],
         measurementSetsAvailable: true,
         orders: [],
-        payments: []
+        payments: [],
+        paymentHistoryAvailable: true
     };
     const customerMap = new Map();
     const orderMap = new Map();
     const dialog = document.querySelector("#record-dialog");
     const recordForm = document.querySelector("#record-form");
     const dialogFields = document.querySelector("#dialog-fields");
-    let selectedCustomerId = null;
+    const profileSettingsForm = document.querySelector("#profile-settings-form");
+    const selectedCustomerStorageKey = `tailordesk-selected-customer-${state.user.id}`;
+    let selectedCustomerId = window.sessionStorage.getItem(selectedCustomerStorageKey);
     let currentOperation = null;
 
     document.querySelector("#profile-email").textContent = state.user.email || "TailorDesk User";
@@ -322,41 +374,46 @@ async function startDashboard() {
         const requestedView = window.location.hash.slice(1);
         showView(requestedView);
     });
+    profileSettingsForm.addEventListener("submit", saveProfileSettings);
 
     document.querySelectorAll('button[data-action^="add-"]').forEach((button) => {
         button.addEventListener("click", () => {
-            const customerId = button.dataset.action === "add-measurement"
-                ? document.querySelector("#measurement-customer-filter").value
-                : null;
-            openRecordDialog(button.dataset.action, null, customerId).catch(showWorkspaceError);
+            openRecordDialog(button.dataset.action, null).catch(showWorkspaceError);
         });
     });
+    document.querySelector('[data-action="go-customers"]').addEventListener("click", () => showView("customers"));
     document.querySelector("#dialog-close").addEventListener("click", () => dialog.close());
     document.querySelector("#dialog-cancel").addEventListener("click", () => dialog.close());
     recordForm.addEventListener("submit", saveDialogRecord);
     document.querySelector("#customer-search").addEventListener("input", renderCustomers);
-    document.querySelector("#order-search").addEventListener("input", renderOrders);
-    document.querySelector("#order-status-filter").addEventListener("change", renderOrders);
-    document.querySelector("#measurement-customer-filter").addEventListener("change", renderMeasurements);
     document.querySelector("#customers-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
-    document.querySelector("#orders-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
     document.querySelector("#measurements-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
     document.querySelector("#profile-measurements").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
     document.querySelector("#profile-orders").addEventListener("click", (event) => {
+        const paymentForm = event.target.closest("form[data-order-payment]");
+        if (paymentForm) return;
         const button = event.target.closest("button[data-action]");
         if (!button) return;
         if (button.dataset.action === "view-order" || button.dataset.action === "edit-order") {
             openRecordDialog(button.dataset.action, button.dataset.id).catch(showWorkspaceError);
-        } else if (button.dataset.action === "pay-order") {
-            openRecordDialog("add-payment", null, null, button.dataset.id).catch(showWorkspaceError);
+        } else if (button.dataset.action === "delete-order") {
+            handleTableAction(event).catch(showWorkspaceError);
         }
+    });
+    document.querySelector("#profile-orders").addEventListener("submit", (event) => {
+        const paymentForm = event.target.closest("form[data-order-payment]");
+        if (paymentForm) recordInlinePayment(event, paymentForm).catch(showWorkspaceError);
+    });
+    document.querySelector("#payments-orders").addEventListener("submit", (event) => {
+        const paymentForm = event.target.closest("form[data-order-payment]");
+        if (paymentForm) recordInlinePayment(event, paymentForm).catch(showWorkspaceError);
     });
     document.querySelector("#customer-profile").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-action]");
         if (!button) return;
         if (button.dataset.action === "profile-add-order") {
             openRecordDialog("add-order", null, selectedCustomerId).catch(showWorkspaceError);
-        } else if (button.dataset.action === "profile-add-measurement") {
+        } else if (button.dataset.action === "profile-add-measurements") {
             openRecordDialog("add-measurement", null, selectedCustomerId).catch(showWorkspaceError);
         } else if (button.dataset.action === "profile-edit-customer") {
             openRecordDialog("edit-customer", selectedCustomerId).catch(showWorkspaceError);
@@ -364,8 +421,8 @@ async function startDashboard() {
     });
 
     function showView(viewName) {
-        const panel = document.querySelector(`#view-${viewName}`);
-        const target = panel ? viewName : "overview";
+        const target = ["overview", "customers", "measurements", "payments", "settings"].includes(viewName) ? viewName : "customers";
+        const panel = document.querySelector(`#view-${target}`);
         document.querySelectorAll(".view-panel").forEach((section) => {
             section.hidden = section.id !== `view-${target}`;
         });
@@ -375,6 +432,47 @@ async function startDashboard() {
         document.querySelector("#page-title").textContent = panel?.dataset.title || "Welcome to TailorDesk.";
         document.querySelector("#page-subtitle").textContent = panel?.dataset.subtitle || "";
         if (window.location.hash !== `#${target}`) history.replaceState(null, "", `#${target}`);
+        if (target === "settings") loadProfileSettings().catch(showWorkspaceError);
+    }
+
+    async function loadProfileSettings() {
+        setWorkspaceMessage("Loading profile settings...");
+        const { data, error } = await supabaseClient.rpc("get_my_tailor_profile");
+        if (error) {
+            throw new Error(`Profile settings are unavailable. Review profile-settings-migration.sql before applying it: ${error.message}`);
+        }
+        const profile = Array.isArray(data) ? data[0] : data;
+        if (!profile) throw new Error("No profile was returned for the signed-in tailor.");
+        profileSettingsForm.elements.full_name.value = profile.full_name || "";
+        profileSettingsForm.elements.shop_name.value = profile.shop_name || "";
+        profileSettingsForm.elements.account_email.value = state.user.email || "";
+        setWorkspaceMessage("");
+    }
+
+    async function saveProfileSettings(event) {
+        event.preventDefault();
+        const submit = profileSettingsForm.querySelector('button[type="submit"]');
+        const fullName = profileSettingsForm.elements.full_name.value.trim();
+        const shopName = profileSettingsForm.elements.shop_name.value.trim();
+        if (!fullName || !shopName) {
+            setWorkspaceMessage("Your name and business name are required.", true);
+            return;
+        }
+
+        submit.disabled = true;
+        setWorkspaceMessage("Saving profile settings...");
+        try {
+            const { error } = await supabaseClient.rpc("update_my_tailor_profile", {
+                p_full_name: fullName,
+                p_shop_name: shopName
+            });
+            if (error) throw error;
+            setWorkspaceMessage("Profile settings saved.");
+        } catch (error) {
+            setWorkspaceMessage(error.message || "Unable to save profile settings.", true);
+        } finally {
+            submit.disabled = false;
+        }
     }
 
     async function loadWorkspace() {
@@ -383,7 +481,7 @@ async function startDashboard() {
             supabaseClient.from("customers").select("id,tailor_id,full_name,phone,address,notes,material_received_date,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
             supabaseClient.from("measurements").select("id,tailor_id,customer_id,measurement_name,measurement_value,unit,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
             supabaseClient.from("customer_measurement_sets").select("customer_id,tailor_id,measurements,unit,notes,updated_at").eq("tailor_id", state.user.id),
-            supabaseClient.from("orders").select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,notes,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false })
+            supabaseClient.from("orders").select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,notes,created_at,measurement_data").eq("tailor_id", state.user.id).order("created_at", { ascending: false })
         ]);
         const measurementSetError = measurementSetsResult.error;
         const measurementSetErrorText = String(measurementSetError?.message || "").toLowerCase();
@@ -397,14 +495,22 @@ async function startDashboard() {
         } else if (measurementSetError) {
             throw measurementSetError;
         }
-        for (const result of [customersResult, measurementsResult, ordersResult]) {
+        let ordersResultFinal = ordersResult;
+        state.garmentMeasurementsAvailable = true;
+        if (ordersResult.error && /measurement_data/i.test(ordersResult.error.message || "")) {
+            state.garmentMeasurementsAvailable = false;
+            ordersResultFinal = await supabaseClient.from("orders")
+                .select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,notes,created_at")
+                .eq("tailor_id", state.user.id).order("created_at", { ascending: false });
+        }
+        for (const result of [customersResult, measurementsResult, ordersResultFinal]) {
             if (result.error) throw result.error;
         }
 
         state.customers = customersResult.data || [];
         state.measurements = measurementsResult.data || [];
         state.measurementSets = measurementSetsResult.data || [];
-        state.orders = ordersResult.data || [];
+        state.orders = ordersResultFinal.data || [];
         customerMap.clear();
         orderMap.clear();
         state.customers.forEach((customer) => customerMap.set(customer.id, customer));
@@ -416,49 +522,35 @@ async function startDashboard() {
             .order("payment_date", { ascending: false });
         if (paymentsResult.error) {
             state.payments = [];
-            const notice = document.querySelector("#payments-notice");
-            notice.textContent = paymentsResult.error.message.toLowerCase().includes("relation") &&
+            state.paymentHistoryAvailable = false;
+            state.paymentHistoryError = paymentsResult.error.message.toLowerCase().includes("relation") &&
                 paymentsResult.error.message.toLowerCase().includes("payments")
-                ? "Payment history is not installed yet. Apply payments-schema.sql in the Supabase SQL Editor to enable it."
+                ? "Payment history is not installed. Review payments-schema.sql to enable payment recording."
                 : `Payment history could not be loaded: ${paymentsResult.error.message}`;
-            notice.hidden = false;
         } else {
+            state.paymentHistoryAvailable = true;
+            state.paymentHistoryError = "";
             state.payments = paymentsResult.data || [];
-            document.querySelector("#payments-notice").hidden = true;
         }
 
         renderAll();
-        setWorkspaceMessage(state.measurementSetsAvailable
-            ? ""
-            : "Full measurement sets are not installed yet. Apply measurement-sets-schema.sql to enable the complete form; your existing workspace remains available.");
+        setWorkspaceMessage(state.paymentHistoryError || (!state.measurementSetsAvailable
+            ? "Full customer measurement sets are not installed. Apply measurement-sets-schema.sql to enable them."
+            : !state.garmentMeasurementsAvailable
+                ? "Garment-specific measurements are not installed yet. Review garment-measurements-migration.sql before applying it."
+                : ""));
     }
 
     function renderAll() {
         renderCustomers();
         renderMeasurements();
-        renderOrders();
         renderPayments();
         renderDashboardStats();
-        populateFilters();
         if (selectedCustomerId) {
             renderCustomerProfile().catch((error) => {
                 setWorkspaceMessage(`Unable to load the customer profile: ${error.message}`, true);
             });
         }
-    }
-
-    function populateFilters() {
-        const customerSelect = document.querySelector("#measurement-customer-filter");
-        const currentCustomer = customerSelect.value;
-        customerSelect.replaceChildren(makeOption("", "All customers"));
-        state.customers.forEach((customer) => customerSelect.append(makeOption(customer.id, customer.full_name)));
-        customerSelect.value = currentCustomer;
-
-        const statusFilter = document.querySelector("#order-status-filter");
-        const currentStatus = statusFilter.value;
-        statusFilter.replaceChildren(makeOption("", "All statuses"));
-        ORDER_STATUSES.forEach((status) => statusFilter.append(makeOption(status, status.replace("_", " "))));
-        statusFilter.value = currentStatus;
     }
 
     function renderCustomers() {
@@ -473,23 +565,12 @@ async function startDashboard() {
             appendCell(row, customer.full_name);
             appendCell(row, customer.phone);
             appendCell(row, customer.address);
-            appendCell(row, formatDate(customer.material_received_date));
+            appendCell(row, formatDate(customer.created_at));
             appendCell(row, customer.notes);
             appendActions(row, customer.id, ["view-customer", "edit-customer", "delete-customer"]);
             body.append(row);
         });
         showEmpty("#customers-empty", rows.length === 0);
-    }
-
-    function renderMeasurements() {
-        const customerId = document.querySelector("#measurement-customer-filter").value;
-        const rows = state.measurements.filter((measurement) => !customerId || measurement.customer_id === customerId);
-        const body = document.querySelector("#measurements-table");
-        body.replaceChildren();
-        const measurementSets = state.measurementSets.filter((set) => !customerId || set.customer_id === customerId);
-        appendMeasurementSetRows(measurementSets, body, true);
-        rows.forEach((measurement) => appendLegacyMeasurementRow(measurement, body, true));
-        showEmpty("#measurements-empty", rows.length === 0 && measurementSets.length === 0);
     }
 
     function appendLegacyMeasurementRow(measurement, body, includeCustomer) {
@@ -540,48 +621,95 @@ async function startDashboard() {
         });
     }
 
-    function renderOrders() {
-        const query = document.querySelector("#order-search").value.trim().toLowerCase();
-        const status = document.querySelector("#order-status-filter").value;
-        const rows = state.orders.filter((order) => {
-            const customer = customerMap.get(order.customer_id);
-            const matchesText = `${customer?.full_name || ""} ${order.clothing_style || ""}`.toLowerCase().includes(query);
-            return matchesText && (!status || order.status === status);
-        });
-        const body = document.querySelector("#orders-table");
+    function renderMeasurements() {
+        const body = document.querySelector("#measurements-table");
         body.replaceChildren();
-        rows.forEach((order) => {
-            const customer = customerMap.get(order.customer_id);
+        const appendMeasurementRow = (customerId, recordType, measurement, value, unit, garment, id, actions) => {
             const row = document.createElement("tr");
-            appendCell(row, customer?.full_name || "Unknown customer");
-            appendCell(row, `${order.clothing_type || ""} ${order.style_name || order.clothing_style || ""}`.trim());
-            appendCell(row, formatDate(order.material_received_date));
-            appendCell(row, formatDate(order.created_at));
-            appendCell(row, formatDate(order.collection_date));
-            appendCell(row, formatMoney(order.total_amount));
-            appendCell(row, formatMoney(order.amount_paid));
-            appendCell(row, formatMoney(balance(order)));
-            appendCell(row, order.status);
-            appendActions(row, order.id, ["view-order", "edit-order", "delete-order"]);
+            appendCell(row, customerMap.get(customerId)?.full_name || "Unknown customer");
+            appendCell(row, recordType);
+            appendCell(row, measurement);
+            appendCell(row, value);
+            appendCell(row, unit);
+            appendCell(row, garment);
+            appendActions(row, id, actions);
             body.append(row);
+        };
+
+        state.measurementSets.forEach((set) => {
+            MEASUREMENT_SECTIONS.forEach((section) => {
+                section.fields.forEach(([key, label]) => {
+                    const value = set.measurements?.[key];
+                    if (value === null || value === undefined || value === "") return;
+                    appendMeasurementRow(set.customer_id, "Customer set", label, value, set.unit, "Customer", set.customer_id, ["edit-measurement-set"]);
+                });
+            });
+            if (set.notes) {
+                appendMeasurementRow(set.customer_id, "Customer set", "Fitting notes", set.notes, "", "Customer", set.customer_id, ["edit-measurement-set"]);
+            }
         });
-        showEmpty("#orders-empty", rows.length === 0);
+
+        state.measurements.forEach((measurement) => {
+            const set = getMeasurementSet(measurement.customer_id);
+            const key = legacyMeasurementKey(measurement.measurement_name);
+            const setValue = key ? set?.measurements?.[key] : null;
+            const sameUnit = set && measurementUnitCode(set.unit) === measurementUnitCode(measurement.unit);
+            if (setValue !== null && setValue !== undefined && setValue !== "" &&
+                Number(setValue) === Number(measurement.measurement_value) && sameUnit) return;
+            appendMeasurementRow(
+                measurement.customer_id,
+                "Individual",
+                set && key ? `Previous ${measurement.measurement_name}` : measurement.measurement_name,
+                measurement.measurement_value,
+                measurement.unit,
+                "Customer",
+                measurement.id,
+                ["edit-measurement", "delete-measurement"]
+            );
+        });
+
+        if (state.garmentMeasurementsAvailable) {
+            state.orders.forEach((order) => {
+                const values = order.measurement_data?.values;
+                if (!values || typeof values !== "object") return;
+                const unit = measurementUnitCode(order.measurement_data.unit) || "cm";
+                MEASUREMENT_SECTIONS.forEach((section) => {
+                    section.fields.forEach(([key, label]) => {
+                        const value = values[key];
+                        if (value === null || value === undefined || value === "") return;
+                        appendMeasurementRow(
+                            order.customer_id,
+                            "Garment",
+                            label,
+                            value,
+                            unit,
+                            order.style_name || order.clothing_style || order.clothing_type,
+                            order.id,
+                            ["edit-order"]
+                        );
+                    });
+                });
+            });
+        }
+        showEmpty("#measurements-empty", body.rows.length === 0);
     }
 
     function renderPayments() {
-        const body = document.querySelector("#payments-table");
-        body.replaceChildren();
-        state.payments.forEach((payment) => {
-            const order = orderMap.get(payment.order_id);
-            const row = document.createElement("tr");
-            appendCell(row, formatDate(payment.payment_date));
-            appendCell(row, customerMap.get(order?.customer_id)?.full_name || "Unknown customer");
-            appendCell(row, order?.clothing_style || "Order unavailable");
-            appendCell(row, payment.method);
-            appendCell(row, formatMoney(payment.amount));
-            body.append(row);
+        const container = document.querySelector("#payments-orders");
+        container.replaceChildren();
+        state.orders.forEach((order) => {
+            const card = document.createElement("article");
+            card.className = "profile-order-card";
+            const heading = document.createElement("h4");
+            const customer = customerMap.get(order.customer_id);
+            heading.textContent = `${customer?.full_name || "Unknown customer"} — ${order.style_name || order.clothing_style || order.clothing_type || "Order"}`;
+            const summary = document.createElement("p");
+            summary.textContent = `Total ${formatMoney(order.total_amount)} · Paid ${formatMoney(order.amount_paid)} · Balance ${formatMoney(balance(order))} · Collection: ${formatDate(order.collection_date)} · Status: ${order.status || "Pending"}`;
+            card.append(heading, summary);
+            appendOrderPaymentSection(card, order);
+            container.append(card);
         });
-        showEmpty("#payments-empty", state.payments.length === 0);
+        showEmpty("#payments-empty", state.orders.length === 0);
     }
 
     async function renderCustomerProfile() {
@@ -600,7 +728,7 @@ async function startDashboard() {
         [
             ["Phone", customer.phone],
             ["Address", customer.address],
-            ["Material first received", formatDate(customer.material_received_date)],
+            ["Date registered", formatDate(customer.created_at)],
             ["General notes", customer.notes]
         ].forEach(([title, value]) => {
             const wrapper = document.createElement("div");
@@ -621,6 +749,14 @@ async function startDashboard() {
         showEmpty("#profile-measurements-empty", measurements.length === 0 && measurementSets.length === 0);
 
         const orders = state.orders.filter((item) => item.customer_id === customer.id);
+        const totals = orders.reduce((summary, order) => ({
+            total: summary.total + Number(order.total_amount || 0),
+            paid: summary.paid + Number(order.amount_paid || 0),
+            balance: summary.balance + balance(order)
+        }), { total: 0, paid: 0, balance: 0 });
+        document.querySelector("#profile-total").textContent = formatMoney(totals.total);
+        document.querySelector("#profile-paid").textContent = formatMoney(totals.paid);
+        document.querySelector("#profile-balance").textContent = formatMoney(totals.balance);
         const orderList = document.querySelector("#profile-orders");
         orderList.replaceChildren();
         for (const order of orders) {
@@ -633,9 +769,26 @@ async function startDashboard() {
             const price = document.createElement("p");
             price.textContent = `Total ${formatMoney(order.total_amount)} · Paid ${formatMoney(order.amount_paid)} · Balance ${formatMoney(balance(order))}`;
             card.append(title, info, price);
+            const measurementData = order.measurement_data;
+            if (measurementData?.values && Object.keys(measurementData.values).length) {
+                const measurementGrid = document.createElement("div");
+                measurementGrid.className = "order-measurements";
+                const unit = measurementUnitCode(measurementData.unit) || "cm";
+                MEASUREMENT_SECTIONS.forEach((section) => section.fields.forEach(([key, label]) => {
+                    const value = measurementData.values[key];
+                    if (value === null || value === undefined || value === "") return;
+                    const chip = document.createElement("span");
+                    const name = document.createElement("strong");
+                    name.textContent = `${label}: `;
+                    chip.append(name, document.createTextNode(`${value} ${unit}`));
+                    measurementGrid.append(chip);
+                }));
+                card.append(measurementGrid);
+            }
             if (order.design_description) appendProfileParagraph(card, "Design", order.design_description);
             if (order.sewing_instructions) appendProfileParagraph(card, "Instructions", order.sewing_instructions);
             if (order.notes) appendProfileParagraph(card, "Other details", order.notes);
+            appendOrderPaymentSection(card, order);
             const images = document.createElement("div");
             images.className = "order-images";
             card.append(images);
@@ -644,26 +797,114 @@ async function startDashboard() {
             actions.className = "profile-actions";
             appendActionButton(actions, "view-order", order.id, "Details");
             appendActionButton(actions, "edit-order", order.id, "Edit");
-            if (balance(order) > 0) appendActionButton(actions, "pay-order", order.id, "Record payment");
+            appendActionButton(actions, "delete-order", order.id, "Delete");
             card.append(actions);
             orderList.append(card);
         }
         showEmpty("#profile-orders-empty", orders.length === 0);
 
-        const customerOrderIds = new Set(orders.map((item) => item.id));
-        const customerPayments = state.payments.filter((payment) => customerOrderIds.has(payment.order_id));
-        const paymentBody = document.querySelector("#profile-payments");
-        paymentBody.replaceChildren();
-        customerPayments.forEach((payment) => {
-            const row = document.createElement("tr");
-            appendCell(row, formatDate(payment.payment_date));
-            appendCell(row, orderMap.get(payment.order_id)?.style_name ||
-                orderMap.get(payment.order_id)?.clothing_style || "Order");
-            appendCell(row, payment.method);
-            appendCell(row, formatMoney(payment.amount));
-            paymentBody.append(row);
+    }
+
+    function appendOrderPaymentSection(card, order) {
+        const section = document.createElement("section");
+        section.className = "garment-payment";
+        const heading = document.createElement("h5");
+        heading.textContent = "Payments for this item";
+        section.append(heading);
+
+        const transactions = state.payments.filter((payment) => payment.order_id === order.id);
+        const history = document.createElement("ul");
+        history.className = "garment-payment-history";
+        transactions.forEach((payment) => {
+            const item = document.createElement("li");
+            item.textContent = `${formatDate(payment.payment_date)} · ${formatMoney(payment.amount)}${payment.method ? ` · ${payment.method}` : ""}`;
+            history.append(item);
         });
-        showEmpty("#profile-payments-empty", customerPayments.length === 0);
+        if (!transactions.length) {
+            const item = document.createElement("li");
+            item.textContent = state.paymentHistoryAvailable ? "No payments recorded for this item yet." : (state.paymentHistoryError || "Payment history is unavailable.");
+            history.append(item);
+        }
+        section.append(history);
+
+        if (state.paymentHistoryAvailable && balance(order) > 0) {
+            const form = document.createElement("form");
+            form.className = "inline-payment-form";
+            form.dataset.orderPayment = "true";
+            form.dataset.orderId = order.id;
+            const amount = document.createElement("input");
+            amount.name = "amount";
+            amount.type = "number";
+            amount.min = "0.01";
+            amount.max = balance(order).toFixed(2);
+            amount.step = "0.01";
+            amount.placeholder = "Amount to record";
+            amount.setAttribute("aria-label", "Payment amount");
+            amount.required = true;
+            const date = document.createElement("input");
+            date.name = "payment_date";
+            date.type = "date";
+            date.value = new Date().toISOString().slice(0, 10);
+            date.setAttribute("aria-label", "Payment date");
+            date.required = true;
+            const method = document.createElement("select");
+            method.name = "method";
+            method.setAttribute("aria-label", "Payment method");
+            method.append(makeOption("", "Method"), makeOption("cash", "Cash"), makeOption("transfer", "Bank transfer"), makeOption("card", "Card"), makeOption("other", "Other"));
+            const submit = document.createElement("button");
+            submit.type = "submit";
+            submit.className = "primary-button";
+            submit.textContent = "Add payment";
+            const message = document.createElement("p");
+            message.className = "payment-form-message";
+            message.setAttribute("role", "status");
+            message.setAttribute("aria-live", "polite");
+            const preview = document.createElement("p");
+            preview.className = "payment-balance-preview";
+            const updatePreview = () => {
+                const entered = Number(amount.value || 0);
+                const due = balance(order) - entered;
+                preview.textContent = entered > 0 && due >= 0
+                    ? `Balance after payment: ${formatMoney(due)}`
+                    : entered > balance(order) ? "Payment exceeds the outstanding balance." : `Balance due: ${formatMoney(balance(order))}`;
+                preview.classList.toggle("is-error", entered > balance(order));
+            };
+            amount.addEventListener("input", updatePreview);
+            updatePreview();
+            form.append(amount, date, method, preview, submit, message);
+            section.append(form);
+        }
+        card.append(section);
+    }
+
+    async function recordInlinePayment(event, form) {
+        event.preventDefault();
+        const orderId = form.dataset.orderId;
+        const order = orderMap.get(orderId);
+        const values = Object.fromEntries(new FormData(form).entries());
+        const amount = Number(values.amount);
+        const message = form.querySelector(".payment-form-message");
+        const submit = form.querySelector('button[type="submit"]');
+        if (!order || !Number.isFinite(amount) || amount <= 0 || amount > balance(order)) {
+            message.textContent = "Enter a positive payment no greater than this item's outstanding balance.";
+            return;
+        }
+        submit.disabled = true;
+        message.textContent = "Saving payment...";
+        try {
+            const { error } = await supabaseClient.rpc("record_payment", {
+                p_order_id: orderId,
+                p_amount: amount,
+                p_payment_date: values.payment_date,
+                p_method: values.method || null
+            });
+            if (error) throw error;
+            await loadWorkspace();
+            setWorkspaceMessage("Payment recorded.");
+        } catch (error) {
+            message.textContent = error.message || "Unable to record this payment.";
+            submit.disabled = false;
+        }
     }
 
     function appendProfileParagraph(parent, label, value) {
@@ -719,9 +960,13 @@ async function startDashboard() {
         const activeOrders = state.orders.filter((order) =>
             !["completed", "cancelled", "collected"].includes(String(order.status || "").toLowerCase())
         );
+        const readyOrders = state.orders.filter((order) => String(order.status || "").toLowerCase() === "completed");
+        const completedOrders = state.orders.filter((order) => ["completed", "collected"].includes(String(order.status || "").toLowerCase()));
         const outstanding = state.orders.reduce((sum, order) => sum + balance(order), 0);
         document.querySelector("#stat-customers").textContent = String(state.customers.length);
         document.querySelector("#stat-orders").textContent = String(activeOrders.length);
+        document.querySelector("#stat-ready").textContent = String(readyOrders.length);
+        document.querySelector("#stat-completed").textContent = String(completedOrders.length);
         document.querySelector("#stat-balance").textContent = formatMoney(outstanding);
 
         const body = document.querySelector("#recent-orders");
@@ -814,7 +1059,10 @@ async function startDashboard() {
                 customerField,
                 { name: "measurement_name", label: "Measurement name", required: true, maxLength: 100, list: "measurement-name-suggestions", placeholder: "Select a common measurement or enter your own" },
                 { name: "measurement_value", label: "Value", type: "number", required: true, min: "0.01", step: "any" },
-                { name: "unit", label: "Unit", placeholder: "e.g. cm or inches", maxLength: 20 }
+                { name: "unit", label: "Unit", type: "select", options: [
+                    { value: "cm", label: "Centimetres (cm)" },
+                    { value: "in", label: "Inches (in)" }
+                ] }
             ];
         }
         if (operation.endsWith("order")) {
@@ -1008,16 +1256,11 @@ async function startDashboard() {
             showView("customers");
             return;
         }
-        if (operation === "add-payment" && !state.orders.some((order) => balance(order) > 0)) {
-            setWorkspaceMessage("There are no orders with an outstanding balance.", true);
-            return;
-        }
-
         const recordType = isMeasurementSetOperation ? "measurement" : operation.split("-").at(-1);
         const source = recordType === "customer" ? state.customers
             : recordType === "measurement" ? state.measurements : state.orders;
         const record = isMeasurementSetOperation
-            ? getMeasurementSet(recordId || presetCustomerId || document.querySelector("#measurement-customer-filter").value)
+            ? getMeasurementSet(recordId || presetCustomerId || "")
             : recordId ? source.find((item) => item.id === recordId) : null;
         const formCustomerId = isMeasurementSetOperation
             ? record?.customer_id || recordId || presetCustomerId || ""
@@ -1045,6 +1288,8 @@ async function startDashboard() {
         document.querySelector("#dialog-message").textContent = "";
         document.querySelector("#dialog-title").textContent = isMeasurementSetOperation
             ? "Full customer measurements"
+            : operation.endsWith("order")
+                ? `${record ? "Edit" : "Add"} clothing item`
             : `${record ? "Edit" : "Add"} ${recordType === "payment" ? "payment" : recordType}`;
         document.querySelector("#dialog-submit").disabled = false;
         document.querySelector("#dialog-submit").hidden = false;
@@ -1061,6 +1306,20 @@ async function startDashboard() {
         fieldsFor(operation, record, presetCustomerId, presetOrderId).forEach((field) => {
             const wrapper = document.createElement("div");
             wrapper.className = "dialog-field";
+            if (field.name === "customer_id" && presetCustomerId && operation === "add-order") {
+                const label = document.createElement("label");
+                label.textContent = "Customer";
+                const selectedCustomer = document.createElement("span");
+                selectedCustomer.className = "measurement-customer-name";
+                selectedCustomer.textContent = customerMap.get(presetCustomerId)?.full_name || "Selected customer";
+                const hiddenCustomerId = document.createElement("input");
+                hiddenCustomerId.type = "hidden";
+                hiddenCustomerId.name = "customer_id";
+                hiddenCustomerId.value = presetCustomerId;
+                wrapper.append(label, selectedCustomer, hiddenCustomerId);
+                dialogFields.append(wrapper);
+                return;
+            }
             const label = document.createElement("label");
             label.htmlFor = `record-${field.name}`;
             label.textContent = field.label;
@@ -1097,7 +1356,104 @@ async function startDashboard() {
             }
             dialogFields.append(wrapper);
         });
+        if (operation.endsWith("order")) {
+            appendOrderMeasurementFields(record);
+            appendOrderBalancePreview(record);
+        }
         dialog.showModal();
+    }
+
+    function appendPaymentBalancePreview() {
+        const orderInput = recordForm.elements.order_id;
+        const amountInput = recordForm.elements.amount;
+        const summary = document.createElement("p");
+        summary.className = "inline-notice order-balance-preview";
+        summary.setAttribute("aria-live", "polite");
+        const update = () => {
+            const order = orderMap.get(orderInput?.value);
+            const amount = Number(amountInput?.value || 0);
+            const remaining = order ? balance(order) - amount : 0;
+            summary.textContent = !order ? "Choose an order to see its balance."
+                : amount <= 0 ? `Balance before payment ${formatMoney(balance(order))}. Enter an amount.`
+                    : remaining >= 0 ? `Balance after payment ${formatMoney(remaining)}.`
+                        : "Payment exceeds the outstanding balance.";
+            summary.style.color = order && amount > balance(order) ? "#a2372b" : "";
+        };
+        orderInput?.addEventListener("change", update);
+        amountInput?.addEventListener("input", update);
+        update();
+        dialogFields.append(summary);
+    }
+
+    function appendOrderBalancePreview(record) {
+        const totalInput = recordForm.elements.total_amount;
+        const paid = Number(record?.amount_paid || 0);
+        const summary = document.createElement("p");
+        summary.className = "inline-notice order-balance-preview";
+        summary.setAttribute("aria-live", "polite");
+        const update = () => {
+            const total = Number(totalInput?.value || 0);
+            const balanceDue = total - paid;
+            summary.textContent = total > 0 && balanceDue >= 0
+                ? `Amount paid ${formatMoney(paid)} · Balance ${formatMoney(balanceDue)}`
+                : total > 0 ? "Amount paid cannot exceed the total price." : "Enter a total price to see the balance.";
+            summary.style.color = total > 0 && balanceDue < 0 ? "#a2372b" : "";
+        };
+        totalInput?.addEventListener("input", update);
+        update();
+        dialogFields.append(summary);
+    }
+
+    function appendOrderMeasurementFields(record) {
+        const section = document.createElement("section");
+        section.className = "measurement-dialog-section garment-measurements";
+        const heading = document.createElement("h3");
+        heading.textContent = "Garment measurements";
+        section.append(heading);
+        const hint = document.createElement("p");
+        hint.className = "upload-help";
+        hint.textContent = state.garmentMeasurementsAvailable
+            ? "Enter only the measurements needed for this item. Leave the rest blank."
+            : "Review garment-measurements-migration.sql to enable measurements saved with each item.";
+        section.append(hint);
+        const unitLabel = document.createElement("label");
+        unitLabel.htmlFor = "record-garment-measurement-unit";
+        unitLabel.textContent = "Measurement unit";
+        const unit = document.createElement("select");
+        unit.id = unitLabel.htmlFor;
+        unit.name = "garment_measurement_unit";
+        unit.append(makeOption("cm", "Centimetres (cm)"), makeOption("in", "Inches (in)"));
+        unit.value = record?.measurement_data?.unit === "in" ? "in" : "cm";
+        unit.disabled = !state.garmentMeasurementsAvailable;
+        section.append(unitLabel, unit);
+        MEASUREMENT_SECTIONS.forEach((group) => {
+            const subheading = document.createElement("h4");
+            subheading.textContent = group.title;
+            section.append(subheading);
+            const grid = document.createElement("div");
+            grid.className = "measurement-input-grid";
+            group.fields.forEach(([key, labelText]) => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "dialog-field";
+                const label = document.createElement("label");
+                label.htmlFor = `record-garment-${key}`;
+                label.textContent = labelText;
+                const input = document.createElement("input");
+                input.id = label.htmlFor;
+                input.name = `garment_measurement_${key}`;
+                input.type = "number";
+                input.inputMode = "decimal";
+                input.min = "0.01";
+                input.step = "any";
+                input.placeholder = "Optional";
+                input.value = record?.measurement_data?.values?.[key] ?? "";
+                input.disabled = !state.garmentMeasurementsAvailable;
+                wrapper.append(label, input);
+                grid.append(wrapper);
+            });
+            section.append(grid);
+        });
+        dialogFields.append(section);
     }
 
     async function showOrderDetails(order) {
@@ -1182,20 +1538,7 @@ async function startDashboard() {
         try {
             const values = Object.fromEntries(new FormData(recordForm).entries());
             const { name: operation, record } = currentOperation;
-            if (operation === "add-payment") {
-                const order = orderMap.get(values.order_id);
-                const amount = Number(values.amount);
-                if (!order || !Number.isFinite(amount) || amount <= 0 || amount > balance(order)) {
-                    throw new Error("Enter a positive payment no greater than the outstanding balance.");
-                }
-                const { error } = await supabaseClient.rpc("record_payment", {
-                    p_order_id: values.order_id,
-                    p_amount: amount,
-                    p_payment_date: values.payment_date,
-                    p_method: values.method || null
-                });
-                if (error) throw error;
-            } else if (operation === "save-measurement-set") {
+            if (operation === "save-measurement-set") {
                 if (!values.customer_id || !customerMap.has(values.customer_id)) {
                     throw new Error("Choose a customer before saving measurements.");
                 }
@@ -1242,7 +1585,7 @@ async function startDashboard() {
                 } else if (table === "measurements") {
                     const value = Number(values.measurement_value);
                     if (!Number.isFinite(value) || value <= 0) throw new Error("Measurement value must be a positive number.");
-                    payload = { customer_id: values.customer_id, measurement_name: values.measurement_name.trim(), measurement_value: value, unit: values.unit.trim() || null };
+                    payload = { customer_id: values.customer_id, measurement_name: values.measurement_name.trim(), measurement_value: value, unit: measurementUnitCode(values.unit) || "cm" };
                 } else {
                     const clothingType = values.clothing_type.trim();
                     const styleName = values.style_name.trim();
@@ -1254,6 +1597,19 @@ async function startDashboard() {
                     }
                     if (!ORDER_STATUSES.includes(status)) {
                         throw new Error("Choose a valid order status.");
+                    }
+                    const garmentMeasurements = {};
+                    for (const section of MEASUREMENT_SECTIONS) {
+                        for (const [key, label] of section.fields) {
+                            const raw = String(values[`garment_measurement_${key}`] || "").trim();
+                            if (!raw) continue;
+                            const value = Number(raw);
+                            if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive number or left blank.`);
+                            garmentMeasurements[key] = value;
+                        }
+                    }
+                    if (Object.keys(garmentMeasurements).length && !state.garmentMeasurementsAvailable) {
+                        throw new Error("Garment measurements need the reviewed garment-measurements-migration.sql schema change before they can be saved.");
                     }
                     const orderId = record?.id || crypto.randomUUID();
                     const uploadedPaths = [];
@@ -1272,6 +1628,11 @@ async function startDashboard() {
                             collection_date: values.collection_date,
                             total_amount: total,
                             amount_paid: paid,
+                            ...(state.garmentMeasurementsAvailable ? {
+                                measurement_data: Object.keys(garmentMeasurements).length
+                                    ? { unit: values.garment_measurement_unit === "in" ? "in" : "cm", values: garmentMeasurements }
+                                    : null
+                            } : {}),
                             status,
                             notes: values.notes.trim() || null,
                             fabric_image_path: record?.fabric_image_path || null,
@@ -1349,6 +1710,7 @@ async function startDashboard() {
         const { action, id } = button.dataset;
         if (action === "view-customer") {
             selectedCustomerId = id;
+            window.sessionStorage.setItem(selectedCustomerStorageKey, id);
             await renderCustomerProfile();
             document.querySelector("#customer-profile").scrollIntoView({ behavior: "smooth", block: "start" });
             return;
@@ -1387,6 +1749,7 @@ async function startDashboard() {
             }
             if (type === "customer" && selectedCustomerId === id) {
                 selectedCustomerId = null;
+                window.sessionStorage.removeItem(selectedCustomerStorageKey);
                 document.querySelector("#customer-profile").hidden = true;
             }
             await loadWorkspace();
@@ -1398,7 +1761,7 @@ async function startDashboard() {
 
     }
 
-    showView(window.location.hash.slice(1) || "overview");
+    showView(window.location.hash.slice(1) || "customers");
     await loadWorkspace();
 }
 

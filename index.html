@@ -119,6 +119,18 @@
 
                 <form id="login-form">
 
+                    <div class="form-group" id="signup-name-field" hidden>
+                        <label for="signup-name">Your name</label>
+                        <input
+                            type="text"
+                            id="signup-name"
+                            name="full_name"
+                            placeholder="Your full name"
+                            autocomplete="name"
+                            maxlength="150"
+                        >
+                    </div>
+
                     <div class="form-group">
                         <label for="email">Email address</label>
 
@@ -182,6 +194,8 @@
                        role="status" aria-live="polite"></p>
 
                 </form>
+
+                <p class="signup-prompt">New to TailorDesk? <button type="button" id="signup-button" class="text-button">Create a tailor account</button></p>
 
                 <form id="recovery-form" hidden>
                     <p class="login-description">Choose a new password for your TailorDesk account.</p>

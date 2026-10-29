@@ -685,6 +685,12 @@
         overflow-y: auto;
     }
 
+    .settings-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: 760px;
+        margin-bottom: 18px;
+    }
+
     .dialog-fields.measurement-dialog-fields {
         max-height: min(68vh, 720px);
         gap: 20px;
@@ -758,6 +764,10 @@
     }
 
     @media (max-width: 580px) {
+        .settings-fields {
+            grid-template-columns: 1fr;
+        }
+
         .measurement-meta-grid,
         .measurement-input-grid {
             grid-template-columns: minmax(0, 1fr);
@@ -826,6 +836,25 @@
         font-size: 19px;
     }
 
+    .profile-summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 0 0 28px;
+    }
+
+    .profile-summary article {
+        display: grid;
+        gap: 6px;
+        padding: 17px;
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+    }
+
+    .profile-summary span { color: var(--muted); font-size: 11px; font-weight: 600; }
+    .profile-summary strong { font-family: "Playfair Display", serif; font-size: 23px; }
+
     .profile-order-list {
         display: grid;
         gap: 14px;
@@ -837,6 +866,70 @@
         border: 1px solid var(--border);
         border-radius: 12px;
     }
+
+    .profile-order-card .order-measurements {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px;
+        margin: 12px 0;
+    }
+
+    .order-measurements span {
+        padding: 8px 10px;
+        color: var(--muted);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 11px;
+    }
+
+    .order-measurements strong { color: var(--dark); }
+
+    .garment-payment {
+        margin-top: 15px;
+        padding: 13px;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+    }
+
+    .garment-payment h5 { margin-bottom: 8px; font-size: 12px; }
+    .garment-payment-history { margin: 0 0 12px; padding-left: 18px; color: var(--muted); font-size: 11px; }
+    .garment-payment-history li + li { margin-top: 4px; }
+
+    .inline-payment-form {
+        display: grid;
+        grid-template-columns: minmax(110px, 1fr) minmax(130px, 1fr) minmax(115px, 0.8fr) auto;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .inline-payment-form input,
+    .inline-payment-form select {
+        min-width: 0;
+        min-height: 38px;
+        padding: 7px 9px;
+        color: var(--dark);
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 11px;
+    }
+
+    .payment-balance-preview,
+    .payment-form-message { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+    .payment-balance-preview.is-error,
+    .payment-form-message { color: #a2372b; }
+
+    .legacy-measurements-section {
+        padding: 18px;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+    }
+
+    .legacy-measurements-section summary { cursor: pointer; font-weight: 600; }
+    .legacy-measurements-content { padding-top: 12px; }
 
     .profile-order-card h4 {
         margin-bottom: 7px;
@@ -907,6 +1000,11 @@
         .profile-columns {
             gap: 20px;
         }
+
+        .profile-summary { grid-template-columns: 1fr; }
+
+        .inline-payment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .inline-payment-form .primary-button { width: 100%; }
     }
 </style>
 
@@ -917,11 +1015,11 @@
         <div class="brand">✂ Tailor<span class="gold">Desk</span></div>
         <p class="nav-label">WORKSPACE</p>
         <nav aria-label="Workspace">
-            <a href="#overview" class="nav-item active" data-view="overview">Overview</a>
-            <a href="#customers" class="nav-item" data-view="customers">Customers</a>
-            <a href="#orders" class="nav-item" data-view="orders">Orders</a>
+            <a href="#overview" class="nav-item" data-view="overview">Overview</a>
+            <a href="#customers" class="nav-item" data-view="customers">Customer Book</a>
             <a href="#measurements" class="nav-item" data-view="measurements">Measurements</a>
-            <a href="#payments" class="nav-item" data-view="payments">Payments</a>
+            <a href="#payments" class="nav-item" data-view="payments">Payments &amp; Balances</a>
+            <a href="#settings" class="nav-item" data-view="settings">Settings</a>
         </nav>
         <button class="logout" id="logout-button" type="button">Sign Out ↗</button>
     </aside>
@@ -953,19 +1051,27 @@
                     <p class="card-number" id="stat-orders">—</p>
                 </article>
                 <article class="card">
+                    <p class="card-label">Ready for Collection</p>
+                    <p class="card-number" id="stat-ready">—</p>
+                </article>
+                <article class="card">
+                    <p class="card-label">Completed Orders</p>
+                    <p class="card-number" id="stat-completed">—</p>
+                </article>
+                <article class="card">
                     <p class="card-label">Outstanding Balances</p>
                     <p class="card-number" id="stat-balance">—</p>
                 </article>
             </div>
             <section class="section">
-                <h2>Recent orders</h2>
+                <div class="section-heading"><h2>Recent orders</h2><button class="primary-button" type="button" data-action="go-customers">Open customer notebook</button></div>
                 <div class="table-wrap">
                     <table>
                         <thead><tr><th>Customer</th><th>Style</th><th>Order date</th><th>Collection</th><th>Status</th></tr></thead>
                         <tbody id="recent-orders"></tbody>
                     </table>
                 </div>
-                <p class="empty table-empty" id="recent-orders-empty">No orders yet. Add an order when you are ready.</p>
+                <p class="empty table-empty" id="recent-orders-empty">No orders yet. Add clothing from a customer profile.</p>
             </section>
         </section>
 
@@ -975,7 +1081,7 @@
                 <label class="search-label" for="customer-search">Search by name or phone</label>
                 <input class="search-input" id="customer-search" type="search" placeholder="Search customers">
                 <div class="table-wrap"><table>
-                    <thead><tr><th>Name</th><th>Phone</th><th>Address</th><th>Material received</th><th>Notes</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Phone</th><th>Address</th><th>Date registered</th><th>Notes</th><th>Actions</th></tr></thead>
                     <tbody id="customers-table"></tbody>
                 </table></div>
                 <p class="empty table-empty" id="customers-empty">No customers found.</p>
@@ -985,75 +1091,73 @@
                     <div><h2 id="customer-profile-name">Customer profile</h2><p class="subtitle" id="customer-profile-subtitle"></p></div>
                     <div class="profile-actions">
                         <button class="secondary-button" type="button" data-action="profile-edit-customer">Edit customer</button>
-                        <button class="primary-button" type="button" data-action="profile-add-measurement">Record measurements</button>
-                        <button class="primary-button" type="button" data-action="profile-add-order">New sewing order</button>
+                        <button class="secondary-button" type="button" data-action="profile-add-measurements">Add measurements</button>
+                        <button class="primary-button" type="button" data-action="profile-add-order">+ Add clothing item</button>
                     </div>
                 </div>
                 <dl class="customer-profile-details" id="customer-profile-details"></dl>
+                <section class="profile-summary" aria-label="Customer financial summary">
+                    <article><span>Total clothing</span><strong id="profile-total">—</strong></article>
+                    <article><span>Amount paid</span><strong id="profile-paid">—</strong></article>
+                    <article><span>Balance due</span><strong id="profile-balance">—</strong></article>
+                </section>
                 <div class="profile-columns">
                     <section>
-                        <h3>Measurements</h3>
-                        <div class="table-wrap"><table><thead><tr><th>Measurement</th><th>Value</th><th>Unit</th><th>Actions</th></tr></thead><tbody id="profile-measurements"></tbody></table></div>
-                        <p class="empty table-empty" id="profile-measurements-empty">No measurements saved.</p>
-                    </section>
-                    <section>
-                        <h3>Sewing orders</h3>
+                        <h3>Clothing items</h3>
                         <div id="profile-orders" class="profile-order-list"></div>
-                        <p class="empty table-empty" id="profile-orders-empty">No sewing orders saved.</p>
+                        <p class="empty table-empty" id="profile-orders-empty">No clothing items yet. Add the first item to this customer profile.</p>
                     </section>
-                    <section>
-                        <h3>Payment records</h3>
-                        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Order</th><th>Method</th><th>Amount</th></tr></thead><tbody id="profile-payments"></tbody></table></div>
-                        <p class="empty table-empty" id="profile-payments-empty">No payments recorded.</p>
-                    </section>
+                    <details class="legacy-measurements-section" id="profile-legacy-measurements-section">
+                        <summary>Previous customer measurements</summary>
+                        <div class="legacy-measurements-content">
+                        <p class="subtitle">Existing measurements remain available here. New measurements are saved with each clothing item.</p>
+                        <div class="table-wrap"><table><thead><tr><th>Measurement</th><th>Value</th><th>Unit</th><th>Actions</th></tr></thead><tbody id="profile-measurements"></tbody></table></div>
+                        <p class="empty table-empty" id="profile-measurements-empty">No previous customer measurements.</p>
+                        </div>
+                    </details>
                 </div>
             </section>
         </section>
 
-        <section class="view-panel" id="view-orders" data-title="Orders" data-subtitle="Track each garment from the first fitting to collection." hidden>
+        <section class="view-panel" id="view-measurements" data-title="Measurements" data-subtitle="Review customer and garment measurements without mixing records." hidden>
             <section class="section">
-                <div class="section-heading"><h2>Order book</h2><button class="primary-button" type="button" data-action="add-order">Create order</button></div>
-                <div class="filter-row">
-                    <label class="search-label" for="order-search">Search orders</label>
-                    <input class="search-input" id="order-search" type="search" placeholder="Customer or clothing style">
-                    <label class="search-label" for="order-status-filter">Status</label>
-                    <select class="search-input" id="order-status-filter"><option value="">All statuses</option></select>
-                </div>
+                <div class="section-heading"><h2>Measurements</h2><button class="primary-button" type="button" data-action="add-measurement">Add customer measurements</button></div>
                 <div class="table-wrap"><table>
-                    <thead><tr><th>Customer</th><th>Clothing / style</th><th>Material received</th><th>Order date</th><th>Collection date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
-                    <tbody id="orders-table"></tbody>
-                </table></div>
-                <p class="empty table-empty" id="orders-empty">No orders found.</p>
-            </section>
-        </section>
-
-        <section class="view-panel" id="view-measurements" data-title="Measurements" data-subtitle="Keep every fitting linked to the right customer." hidden>
-            <section class="section">
-                <div class="section-heading"><h2>Measurement records</h2><button class="primary-button" type="button" data-action="add-measurement">Record measurements</button></div>
-                <label class="search-label" for="measurement-customer-filter">Customer</label>
-                <select class="search-input" id="measurement-customer-filter"><option value="">All customers</option></select>
-                <datalist id="measurement-name-suggestions">
-                    <option value="Chest"></option><option value="Waist"></option><option value="Hips"></option>
-                    <option value="Shoulder"></option><option value="Sleeve length"></option>
-                    <option value="Shirt length"></option><option value="Trouser waist"></option><option value="Trouser length"></option>
-                </datalist>
-                <div class="table-wrap"><table>
-                    <thead><tr><th>Customer</th><th>Measurement</th><th>Value</th><th>Unit</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Customer</th><th>Record</th><th>Measurement</th><th>Value</th><th>Unit</th><th>Garment</th><th>Actions</th></tr></thead>
                     <tbody id="measurements-table"></tbody>
                 </table></div>
-                <p class="empty table-empty" id="measurements-empty">No measurements found.</p>
+                <p class="empty table-empty" id="measurements-empty">No measurements have been recorded yet.</p>
             </section>
         </section>
 
-        <section class="view-panel" id="view-payments" data-title="Payments" data-subtitle="Record payments and review payment history by order." hidden>
+        <section class="view-panel" id="view-payments" data-title="Payments &amp; Balances" data-subtitle="Review payment history and record payments against individual garments." hidden>
             <section class="section">
-                <div class="section-heading"><h2>Payment history</h2><button class="primary-button" type="button" data-action="add-payment">Record payment</button></div>
-                <p id="payments-notice" class="inline-notice" hidden></p>
-                <div class="table-wrap"><table>
-                    <thead><tr><th>Payment date</th><th>Customer</th><th>Order</th><th>Method</th><th>Amount</th></tr></thead>
-                    <tbody id="payments-table"></tbody>
-                </table></div>
-                <p class="empty table-empty" id="payments-empty">No payments recorded yet.</p>
+                <div class="section-heading"><h2>Garment balances and payment history</h2></div>
+                <div id="payments-orders" class="profile-order-list"></div>
+                <p class="empty table-empty" id="payments-empty">No orders are available to show payments for.</p>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-settings" data-title="Settings" data-subtitle="Manage your tailor profile and business name." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Business profile</h2></div>
+                <form id="profile-settings-form">
+                    <div class="dialog-fields settings-fields">
+                        <div class="dialog-field">
+                            <label for="settings-full-name">Your name</label>
+                            <input id="settings-full-name" name="full_name" type="text" autocomplete="name" required>
+                        </div>
+                        <div class="dialog-field">
+                            <label for="settings-shop-name">Business name</label>
+                            <input id="settings-shop-name" name="shop_name" type="text" autocomplete="organization" required>
+                        </div>
+                        <div class="dialog-field">
+                            <label for="settings-email">Account email</label>
+                            <input id="settings-email" name="account_email" type="email" readonly>
+                        </div>
+                    </div>
+                    <button class="primary-button" type="submit">Save profile</button>
+                </form>
             </section>
         </section>
     </main>
