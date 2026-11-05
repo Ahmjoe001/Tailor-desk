@@ -1,42 +1,43 @@
-/* ==============================
-   TAILORDESK DESIGN SYSTEM
-   Black • White • Gold
-================================ */
-
 :root {
-    --black: #101010;
-    --black-soft: #181818;
-    --gold: #c5a15b;
-    --gold-light: #e0c58d;
-    --white: #ffffff;
-    --background: #f7f6f3;
-    --text: #202020;
-    --muted: #777777;
-    --border: #e8e6e1;
-    --form-label: #353535;
-    --input-background: #ffffff;
-    --input-placeholder: #a7a7a7;
-    --welcome-background: #f7f1e5;
-    --welcome-border: #eee1c7;
+    --black: #292820;
+    --black-soft: #403d32;
+    --gold: #b08d45;
+    --gold-light: #9b7939;
+    --white: #fffcf5;
+    --background: #f5f0e6;
+    --text: #292820;
+    --muted: #777365;
+    --border: #e5dccb;
+    --form-label: #35342d;
+    --input-background: #f9f6ef;
+    --input-placeholder: #989181;
+    --welcome-background: #f1e8d5;
+    --welcome-border: #e5d7b5;
+    --brand-start: #f1e8d5;
+    --brand-center: #fffcf5;
+    --brand-end: #eae0cd;
     --radius: 12px;
-    --shadow: 0 20px 70px rgba(0, 0, 0, 0.08);
+    --shadow: 0 20px 70px rgba(65, 53, 28, 0.09);
 }
 
 :root[data-theme="dark"] {
-    --black: #e8e6df;
-    --black-soft: #d7c9a8;
-    --gold: #d8bb7c;
-    --gold-light: #efd9a6;
-    --white: #202520;
-    --background: #151915;
-    --text: #f0eee8;
-    --muted: #b4b6ad;
-    --border: #3a423a;
-    --form-label: #e7e5de;
-    --input-background: #202620;
-    --input-placeholder: #9da399;
-    --welcome-background: #332f25;
-    --welcome-border: #60533a;
+    --black: #f4efe3;
+    --black-soft: #ded3b8;
+    --gold: #d4af62;
+    --gold-light: #e6cb91;
+    --white: #24251f;
+    --background: #191a18;
+    --text: #f4efe3;
+    --muted: #b7b1a3;
+    --border: #3c3b33;
+    --form-label: #ece5d7;
+    --input-background: #20211d;
+    --input-placeholder: #918d81;
+    --welcome-background: #302d24;
+    --welcome-border: #5a4d34;
+    --brand-start: #20211d;
+    --brand-center: #24251f;
+    --brand-end: #191a18;
     --shadow: 0 20px 70px rgba(0, 0, 0, 0.25);
     color-scheme: dark;
 }
@@ -90,14 +91,14 @@ a:focus-visible {
     min-height: 100vh;
     padding: 48px 8%;
     overflow: hidden;
-    color: var(--white);
+    color: var(--text);
     background:
         radial-gradient(
             ellipse at 85% 15%,
-            rgba(197, 161, 91, 0.19),
+            rgba(176, 141, 69, 0.13),
             transparent 35%
         ),
-        linear-gradient(145deg, #111111, #191919 65%, #0b0b0b);
+        linear-gradient(145deg, var(--brand-start), var(--brand-center) 65%, var(--brand-end));
 }
 
 .brand-panel::after {
@@ -119,7 +120,7 @@ a:focus-visible {
     align-items: center;
     gap: 12px;
     width: fit-content;
-    color: var(--white);
+    color: var(--text);
     text-decoration: none;
     font-family: "Playfair Display", serif;
     font-size: 29px;
@@ -140,7 +141,7 @@ a:focus-visible {
 }
 
 .gold-text {
-    color: var(--gold-light);
+    color: var(--gold);
 }
 
 .brand-content {
@@ -169,7 +170,7 @@ a:focus-visible {
 
 .brand-description {
     max-width: 410px;
-    color: #bdbdbd;
+    color: var(--muted);
     font-size: 14px;
     line-height: 1.9;
 }
@@ -192,9 +193,9 @@ a:focus-visible {
     flex-shrink: 0;
     width: 42px;
     height: 42px;
-    color: var(--gold-light);
-    background: rgba(197, 161, 91, 0.09);
-    border: 1px solid rgba(197, 161, 91, 0.24);
+    color: var(--gold);
+    background: rgba(176, 141, 69, 0.08);
+    border: 1px solid rgba(176, 141, 69, 0.22);
     border-radius: 10px;
     font-size: 12px;
     font-weight: 700;
@@ -202,13 +203,13 @@ a:focus-visible {
 
 .feature h3 {
     margin-bottom: 5px;
-    color: #f4f4f4;
+    color: var(--text);
     font-size: 13px;
     font-weight: 600;
 }
 
 .feature p {
-    color: #999999;
+    color: var(--muted);
     font-size: 12px;
 }
 
@@ -219,8 +220,8 @@ a:focus-visible {
     justify-content: space-between;
     gap: 12px;
     padding-top: 20px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    color: #858585;
+    border-top: 1px solid rgba(41, 40, 32, 0.12);
+    color: var(--muted);
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 1.5px;
@@ -378,7 +379,7 @@ a:focus-visible {
 }
 
 .text-button:hover {
-    color: var(--gold-light);
+    color: var(--gold);
 }
 
 .form-options {
@@ -485,7 +486,7 @@ a:focus-visible {
 }
 
 .login-divider p {
-    color: #999;
+    color: var(--muted);
     font-size: 8px;
     font-weight: 700;
     letter-spacing: 1px;
@@ -493,7 +494,7 @@ a:focus-visible {
 }
 
 .help-text {
-    color: #888;
+    color: var(--muted);
     text-align: center;
     font-size: 11px;
     line-height: 1.8;
@@ -516,8 +517,8 @@ a:focus-visible {
     justify-content: space-between;
     gap: 12px;
     padding-top: 20px;
-    border-top: 1px solid #f0efec;
-    color: #999;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
     font-size: 10px;
 }
 

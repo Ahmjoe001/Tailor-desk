@@ -131,6 +131,30 @@
                         >
                     </div>
 
+                    <div class="form-group" id="signup-business-field" hidden>
+                        <label for="signup-business">Business name</label>
+                        <input
+                            type="text"
+                            id="signup-business"
+                            name="shop_name"
+                            placeholder="Your tailoring business"
+                            autocomplete="organization"
+                            maxlength="150"
+                        >
+                    </div>
+
+                    <div class="form-group" id="signup-phone-field" hidden>
+                        <label for="signup-phone">Phone number</label>
+                        <input
+                            type="tel"
+                            id="signup-phone"
+                            name="phone"
+                            placeholder="Your business phone"
+                            autocomplete="tel"
+                            maxlength="40"
+                        >
+                    </div>
+
                     <div class="form-group">
                         <label for="email">Email address</label>
 
@@ -141,6 +165,17 @@
                             placeholder="you@example.com"
                             autocomplete="username"
                             required
+                        >
+                    </div>
+
+                    <div class="form-group" id="signup-confirm-password-field" hidden>
+                        <label for="signup-confirm-password">Confirm password</label>
+                        <input
+                            type="password"
+                            id="signup-confirm-password"
+                            name="password_confirmation"
+                            placeholder="Re-enter your password"
+                            autocomplete="new-password"
                         >
                     </div>
 

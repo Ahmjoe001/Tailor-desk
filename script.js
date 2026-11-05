@@ -1,6 +1,15 @@
 // TailorDesk frontend: authentication and the authenticated workspace.
 const THEME_STORAGE_KEY = "tailordesk-theme";
 const ORDER_STATUSES = ["pending", "in_progress", "completed", "collected", "cancelled"];
+const ORDER_PROGRESS_STAGES = [
+    ["order_received", "Order received"],
+    ["measurement_completed", "Measurement completed"],
+    ["cutting", "Cutting"],
+    ["sewing_in_progress", "Sewing in progress"],
+    ["finishing", "Finishing"],
+    ["ready_for_collection", "Ready for collection"],
+    ["collected", "Collected"]
+];
 const MEASUREMENT_SECTIONS = [
     {
         title: "Upper body",
@@ -164,14 +173,27 @@ if (loginForm) {
     const signupButton = document.querySelector("#signup-button");
     const signupNameField = document.querySelector("#signup-name-field");
     const signupNameInput = document.querySelector("#signup-name");
+    const signupBusinessField = document.querySelector("#signup-business-field");
+    const signupBusinessInput = document.querySelector("#signup-business");
+    const signupPhoneField = document.querySelector("#signup-phone-field");
+    const signupPhoneInput = document.querySelector("#signup-phone");
+    const signupConfirmPasswordField = document.querySelector("#signup-confirm-password-field");
+    const signupConfirmPasswordInput = document.querySelector("#signup-confirm-password");
     let isSigningUp = false;
 
     signupButton?.addEventListener("click", () => {
         isSigningUp = !isSigningUp;
         signupNameField.hidden = !isSigningUp;
+        signupBusinessField.hidden = !isSigningUp;
+        signupPhoneField.hidden = !isSigningUp;
+        signupConfirmPasswordField.hidden = !isSigningUp;
         signupNameInput.required = isSigningUp;
+        signupBusinessInput.required = isSigningUp;
+        signupPhoneInput.required = isSigningUp;
+        signupConfirmPasswordInput.required = isSigningUp;
         signupButton.textContent = isSigningUp ? "Back to sign in" : "Create a tailor account";
         loginForm.querySelector('button[type="submit"] span:first-child').textContent = isSigningUp ? "Create Account" : "Sign In";
+        passwordInput.autocomplete = isSigningUp ? "new-password" : "current-password";
         showLoginMessage(isSigningUp ? "Enter your name, email, and password to create your tailor account." : "");
         if (isSigningUp) signupNameInput.focus();
     });
@@ -188,6 +210,12 @@ if (loginForm) {
             showLoginMessage("The sign-in service could not be loaded. Refresh and try again.", true);
             return;
         }
+        if (isSigningUp && passwordInput.value !== signupConfirmPasswordInput.value) {
+            signupConfirmPasswordInput.setCustomValidity("Passwords do not match.");
+            signupConfirmPasswordInput.reportValidity();
+            signupConfirmPasswordInput.setCustomValidity("");
+            return;
+        }
 
         const submitButton = loginForm.querySelector('button[type="submit"]');
         submitButton.disabled = true;
@@ -198,7 +226,11 @@ if (loginForm) {
                 ? await supabaseClient.auth.signUp({
                     email: emailInput.value.trim(),
                     password: passwordInput.value,
-                    options: { data: { full_name: signupNameInput.value.trim() } }
+                    options: { data: {
+                        full_name: signupNameInput.value.trim(),
+                        shop_name: signupBusinessInput.value.trim(),
+                        phone: signupPhoneInput.value.trim()
+                    } }
                 })
                 : await supabaseClient.auth.signInWithPassword({
                     email: emailInput.value.trim(),
@@ -210,9 +242,16 @@ if (loginForm) {
                 showLoginMessage("Account created. Check your email to confirm it, then sign in.");
                 isSigningUp = false;
                 signupNameField.hidden = true;
+                signupBusinessField.hidden = true;
+                signupPhoneField.hidden = true;
+                signupConfirmPasswordField.hidden = true;
                 signupNameInput.required = false;
+                signupBusinessInput.required = false;
+                signupPhoneInput.required = false;
+                signupConfirmPasswordInput.required = false;
                 signupButton.textContent = "Create a tailor account";
                 submitButton.querySelector("span:first-child").textContent = "Sign In";
+                passwordInput.autocomplete = "current-password";
             } else {
                 if (isSigningUp) showLoginMessage("Account created. Opening your workspace...");
                 window.location.href = "dashboard.html";
@@ -331,14 +370,35 @@ async function startDashboard() {
 
     const state = {
         user: data.user,
+        tailorProfile: null,
+        tailorProfileError: null,
         customers: [],
         measurements: [],
         measurementSets: [],
+        measurementHistory: [],
+        measurementHistoryAvailable: true,
         measurementSetsAvailable: true,
         orders: [],
+        orderProgressAvailable: true,
         payments: [],
+        expenses: [],
+        expensesAvailable: true,
+        expensesMessage: "",
+        inventory: [],
+        inventoryAvailable: true,
+        inventoryMessage: "",
+        customerPhotosAvailable: true,
+        catalogue: [],
+        catalogueAvailable: true,
+        catalogueMessage: "",
+        privateImageUrls: new Map(),
+        catalogueIndex: 0,
+        cataloguePaused: false,
+        catalogueEditingId: null,
+        catalogueTimer: null,
         paymentHistoryAvailable: true
     };
+    let tailorProfilePromise = null;
     const customerMap = new Map();
     const orderMap = new Map();
     const dialog = document.querySelector("#record-dialog");
@@ -348,8 +408,21 @@ async function startDashboard() {
     const selectedCustomerStorageKey = `tailordesk-selected-customer-${state.user.id}`;
     let selectedCustomerId = window.sessionStorage.getItem(selectedCustomerStorageKey);
     let currentOperation = null;
+    const notificationStorageKey = `tailordesk-read-notifications-${state.user.id}`;
+    try {
+        state.notificationReadIds = new Set(JSON.parse(window.localStorage.getItem(notificationStorageKey) || "[]"));
+    } catch (error) {
+        state.notificationReadIds = new Set();
+    }
 
     document.querySelector("#profile-email").textContent = state.user.email || "TailorDesk User";
+    const personalizedGreeting = document.querySelector("#personalized-greeting");
+    personalizedGreeting.addEventListener("animationend", (event) => {
+        if (event.target === personalizedGreeting && event.animationName === "personalized-greeting-exit") {
+            animatePersonalizedGreeting();
+        }
+    });
+    getTailorProfile().then(animatePersonalizedGreeting);
 
     document.querySelector("#logout-button").addEventListener("click", async (event) => {
         const button = event.currentTarget;
@@ -381,15 +454,60 @@ async function startDashboard() {
             openRecordDialog(button.dataset.action, null).catch(showWorkspaceError);
         });
     });
-    document.querySelector('[data-action="go-customers"]').addEventListener("click", () => showView("customers"));
+    document.querySelectorAll("#catalogue-add-design, #catalogue-add-first").forEach((button) => {
+        button.addEventListener("click", () => openCatalogueDialog().catch(showWorkspaceError));
+    });
+    const catalogueDialog = document.querySelector("#catalogue-dialog");
+    const catalogueForm = document.querySelector("#catalogue-form");
+    document.querySelector("#catalogue-dialog-close").addEventListener("click", () => catalogueDialog.close());
+    document.querySelector("#catalogue-dialog-cancel").addEventListener("click", () => catalogueDialog.close());
+    catalogueForm.addEventListener("submit", (event) => saveCatalogueRecord(event).catch(showWorkspaceError));
+    document.querySelector("#catalogue-management").addEventListener("click", (event) => {
+        handleCatalogueAction(event).catch(showWorkspaceError);
+    });
+    document.querySelector("#catalogue-previous").addEventListener("click", () => changeCatalogueSlide(-1));
+    document.querySelector("#catalogue-next").addEventListener("click", () => changeCatalogueSlide(1));
+    document.querySelector("#catalogue-pause").addEventListener("click", toggleCatalogueSlideshow);
+    document.querySelector("#catalogue-view-design").addEventListener("click", () => {
+        showCatalogueDetails().catch(showWorkspaceError);
+    });
+    document.querySelector("#catalogue-detail-close").addEventListener("click", () => {
+        document.querySelector("#catalogue-detail-dialog").close();
+    });
+    document.querySelector("#catalogue-indicators").addEventListener("click", (event) => {
+        const indicator = event.target.closest("button[data-index]");
+        if (!indicator) return;
+        state.catalogueIndex = Number(indicator.dataset.index);
+        renderCatalogue().catch(showWorkspaceError);
+    });
+    document.querySelectorAll('[data-action="go-customers"]').forEach((button) => {
+        button.addEventListener("click", () => showView("customers"));
+    });
     document.querySelector("#dialog-close").addEventListener("click", () => dialog.close());
     document.querySelector("#dialog-cancel").addEventListener("click", () => dialog.close());
     recordForm.addEventListener("submit", saveDialogRecord);
     document.querySelector("#customer-search").addEventListener("input", renderCustomers);
-    document.querySelector("#customers-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
+    document.querySelectorAll("#report-start-date, #report-end-date").forEach((input) => {
+        input.addEventListener("change", renderBusinessOperations);
+    });
+    document.querySelector("#customer-cards").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
     document.querySelector("#measurements-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
+    document.querySelector("#expenses-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
+    document.querySelector("#inventory-table").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
+    document.querySelector("#notification-list").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-notification-id]");
+        if (!button) return;
+        state.notificationReadIds.add(button.dataset.notificationId);
+        window.localStorage.setItem(notificationStorageKey, JSON.stringify([...state.notificationReadIds]));
+        renderNotifications();
+    });
     document.querySelector("#profile-measurements").addEventListener("click", (event) => handleTableAction(event).catch(showWorkspaceError));
     document.querySelector("#profile-orders").addEventListener("click", (event) => {
+        const receiptButton = event.target.closest("button[data-receipt-payment]");
+        if (receiptButton) {
+            printPaymentReceipt(receiptButton.dataset.receiptPayment).catch(showWorkspaceError);
+            return;
+        }
         const paymentForm = event.target.closest("form[data-order-payment]");
         if (paymentForm) return;
         const button = event.target.closest("button[data-action]");
@@ -408,6 +526,12 @@ async function startDashboard() {
         const paymentForm = event.target.closest("form[data-order-payment]");
         if (paymentForm) recordInlinePayment(event, paymentForm).catch(showWorkspaceError);
     });
+    document.querySelector("#payments-orders").addEventListener("click", (event) => {
+        const receiptButton = event.target.closest("button[data-receipt-payment]");
+        if (receiptButton) printPaymentReceipt(receiptButton.dataset.receiptPayment).catch(showWorkspaceError);
+    });
+    document.querySelector("#receipt-close").addEventListener("click", clearPrintedReceipt);
+    window.addEventListener("afterprint", clearPrintedReceipt);
     document.querySelector("#customer-profile").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-action]");
         if (!button) return;
@@ -421,7 +545,7 @@ async function startDashboard() {
     });
 
     function showView(viewName) {
-        const target = ["overview", "customers", "measurements", "payments", "settings"].includes(viewName) ? viewName : "customers";
+        const target = ["overview", "customers", "expenses", "inventory", "reports", "settings"].includes(viewName) ? viewName : "customers";
         const panel = document.querySelector(`#view-${target}`);
         document.querySelectorAll(".view-panel").forEach((section) => {
             section.hidden = section.id !== `view-${target}`;
@@ -437,16 +561,61 @@ async function startDashboard() {
 
     async function loadProfileSettings() {
         setWorkspaceMessage("Loading profile settings...");
-        const { data, error } = await supabaseClient.rpc("get_my_tailor_profile");
-        if (error) {
-            throw new Error(`Profile settings are unavailable. Review profile-settings-migration.sql before applying it: ${error.message}`);
+        const profile = await getTailorProfile();
+        if (state.tailorProfileError) {
+            throw new Error(`Profile settings are unavailable. Review profile-settings-migration.sql before applying it: ${state.tailorProfileError.message}`);
         }
-        const profile = Array.isArray(data) ? data[0] : data;
         if (!profile) throw new Error("No profile was returned for the signed-in tailor.");
         profileSettingsForm.elements.full_name.value = profile.full_name || "";
         profileSettingsForm.elements.shop_name.value = profile.shop_name || "";
+        profileSettingsForm.elements.business_phone.value = state.user.user_metadata?.phone || "";
         profileSettingsForm.elements.account_email.value = state.user.email || "";
         setWorkspaceMessage("");
+    }
+
+    function getTailorProfile() {
+        if (state.tailorProfile) return Promise.resolve(state.tailorProfile);
+        if (!tailorProfilePromise) {
+            tailorProfilePromise = supabaseClient.rpc("get_my_tailor_profile")
+                .then(({ data, error }) => {
+                    if (error) throw error;
+                    const profile = Array.isArray(data) ? data[0] : data;
+                    if (!profile) throw new Error("No profile was returned for the signed-in tailor.");
+                    state.tailorProfile = profile;
+                    state.tailorProfileError = null;
+                    return profile;
+                })
+                .catch((error) => {
+                    state.tailorProfileError = error;
+                    tailorProfilePromise = null;
+                    return null;
+                });
+        }
+        return tailorProfilePromise;
+    }
+
+    function animatePersonalizedGreeting() {
+        const hour = new Date().getHours();
+        const salutation = hour >= 5 && hour < 12 ? "Good morning"
+            : hour >= 12 && hour < 17 ? "Good afternoon" : "Good evening";
+        const name = state.tailorProfile?.shop_name?.trim() || state.tailorProfile?.full_name?.trim();
+        const message = name ? `${salutation}, ${name}!` : "Welcome to TailorDesk!";
+        const lastLetterDelay = Math.min(Math.max(message.length - 1, 0) * 6, 180);
+        const typingDuration = lastLetterDelay + 90;
+        const letters = Array.from(message, (character, index) => {
+            const letter = document.createElement("span");
+            letter.className = "personalized-greeting-letter";
+            letter.setAttribute("aria-hidden", "true");
+            letter.textContent = character;
+            letter.style.animationDelay = `${Math.min(index * 6, 180)}ms`;
+            return letter;
+        });
+        personalizedGreeting.setAttribute("aria-label", message);
+        personalizedGreeting.style.setProperty("--greeting-typing-duration", `${typingDuration}ms`);
+        personalizedGreeting.classList.remove("is-animating");
+        personalizedGreeting.replaceChildren(...letters);
+        void personalizedGreeting.offsetWidth;
+        personalizedGreeting.classList.add("is-animating");
     }
 
     async function saveProfileSettings(event) {
@@ -454,6 +623,7 @@ async function startDashboard() {
         const submit = profileSettingsForm.querySelector('button[type="submit"]');
         const fullName = profileSettingsForm.elements.full_name.value.trim();
         const shopName = profileSettingsForm.elements.shop_name.value.trim();
+        const businessPhone = profileSettingsForm.elements.business_phone.value.trim();
         if (!fullName || !shopName) {
             setWorkspaceMessage("Your name and business name are required.", true);
             return;
@@ -467,6 +637,15 @@ async function startDashboard() {
                 p_shop_name: shopName
             });
             if (error) throw error;
+            state.tailorProfile = { ...(state.tailorProfile || {}), full_name: fullName, shop_name: shopName };
+            state.tailorProfileError = null;
+            tailorProfilePromise = Promise.resolve(state.tailorProfile);
+            animatePersonalizedGreeting();
+            const { data: userData, error: metadataError } = await supabaseClient.auth.updateUser({
+                data: { ...state.user.user_metadata, phone: businessPhone || null }
+            });
+            if (metadataError) throw metadataError;
+            if (userData?.user) state.user = userData.user;
             setWorkspaceMessage("Profile settings saved.");
         } catch (error) {
             setWorkspaceMessage(error.message || "Unable to save profile settings.", true);
@@ -477,12 +656,25 @@ async function startDashboard() {
 
     async function loadWorkspace() {
         setWorkspaceMessage("Loading your workspace...");
-        const [customersResult, measurementsResult, measurementSetsResult, ordersResult] = await Promise.all([
-            supabaseClient.from("customers").select("id,tailor_id,full_name,phone,address,notes,material_received_date,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
+        const [customersResultInitial, measurementsResult, measurementSetsResult, ordersResult, catalogueResult, measurementHistoryResult, expensesResult, inventoryResult] = await Promise.all([
+            supabaseClient.from("customers").select("id,tailor_id,full_name,phone,address,notes,material_received_date,photo_path,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
             supabaseClient.from("measurements").select("id,tailor_id,customer_id,measurement_name,measurement_value,unit,created_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
             supabaseClient.from("customer_measurement_sets").select("customer_id,tailor_id,measurements,unit,notes,updated_at").eq("tailor_id", state.user.id),
-            supabaseClient.from("orders").select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,notes,created_at,measurement_data").eq("tailor_id", state.user.id).order("created_at", { ascending: false })
+            supabaseClient.from("orders").select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,progress_stage,notes,created_at,measurement_data").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
+            supabaseClient.from("fashion_catalogue").select("id,tailor_id,design_name,category,description,price,image_path,created_at,updated_at").eq("tailor_id", state.user.id).order("created_at", { ascending: false }),
+            supabaseClient.from("customer_measurement_set_history").select("id,customer_id,tailor_id,measurements,unit,notes,recorded_at").eq("tailor_id", state.user.id).order("recorded_at", { ascending: false }),
+            supabaseClient.from("business_expenses").select("id,tailor_id,expense_name,category,amount,expense_date,description,created_at").eq("tailor_id", state.user.id).order("expense_date", { ascending: false }),
+            supabaseClient.from("inventory_items").select("id,tailor_id,item_name,category,quantity,unit,purchase_price,selling_price,low_stock_threshold,description,supplier,created_at,updated_at").eq("tailor_id", state.user.id).order("item_name", { ascending: true })
         ]);
+        let customersResult = customersResultInitial;
+        state.customerPhotosAvailable = true;
+        const customerPhotoError = String(customersResult.error?.message || "").toLowerCase();
+        if (customersResult.error && /photo_path/.test(customerPhotoError)) {
+            state.customerPhotosAvailable = false;
+            customersResult = await supabaseClient.from("customers")
+                .select("id,tailor_id,full_name,phone,address,notes,material_received_date,created_at")
+                .eq("tailor_id", state.user.id).order("created_at", { ascending: false });
+        }
         const measurementSetError = measurementSetsResult.error;
         const measurementSetErrorText = String(measurementSetError?.message || "").toLowerCase();
         if (measurementSetError &&
@@ -497,10 +689,25 @@ async function startDashboard() {
         }
         let ordersResultFinal = ordersResult;
         state.garmentMeasurementsAvailable = true;
-        if (ordersResult.error && /measurement_data/i.test(ordersResult.error.message || "")) {
-            state.garmentMeasurementsAvailable = false;
+        state.orderProgressAvailable = true;
+        let orderFallbackAttempts = 0;
+        while (ordersResultFinal.error && orderFallbackAttempts < 2) {
+            orderFallbackAttempts += 1;
+            const missingOrderFields = String(ordersResultFinal.error.message || "").toLowerCase();
+            const missingMeasurements = missingOrderFields.includes("measurement_data");
+            const missingProgress = missingOrderFields.includes("progress_stage");
+            if (!missingMeasurements && !missingProgress) throw ordersResultFinal.error;
+            if (missingMeasurements) state.garmentMeasurementsAvailable = false;
+            if (missingProgress) state.orderProgressAvailable = false;
+            const orderColumns = [
+                "id", "tailor_id", "customer_id", "clothing_style", "clothing_type", "style_name",
+                "design_description", "fabric_image_path", "style_image_path", "sewing_instructions",
+                "material_received_date", "total_amount", "amount_paid", "collection_date", "status",
+                ...(state.orderProgressAvailable ? ["progress_stage"] : []), "notes", "created_at",
+                ...(state.garmentMeasurementsAvailable ? ["measurement_data"] : [])
+            ];
             ordersResultFinal = await supabaseClient.from("orders")
-                .select("id,tailor_id,customer_id,clothing_style,clothing_type,style_name,design_description,fabric_image_path,style_image_path,sewing_instructions,material_received_date,total_amount,amount_paid,collection_date,status,notes,created_at")
+                .select(orderColumns.join(","))
                 .eq("tailor_id", state.user.id).order("created_at", { ascending: false });
         }
         for (const result of [customersResult, measurementsResult, ordersResultFinal]) {
@@ -511,6 +718,69 @@ async function startDashboard() {
         state.measurements = measurementsResult.data || [];
         state.measurementSets = measurementSetsResult.data || [];
         state.orders = ordersResultFinal.data || [];
+        const historyErrorText = String(measurementHistoryResult.error?.message || "").toLowerCase();
+        if (measurementHistoryResult.error && (
+            measurementHistoryResult.error.code === "42P01" ||
+            historyErrorText.includes("customer_measurement_set_history") &&
+            (historyErrorText.includes("does not exist") || historyErrorText.includes("could not find") || historyErrorText.includes("schema cache"))
+        )) {
+            state.measurementHistory = [];
+            state.measurementHistoryAvailable = false;
+        } else if (measurementHistoryResult.error) {
+            throw measurementHistoryResult.error;
+        } else {
+            state.measurementHistory = measurementHistoryResult.data || [];
+            state.measurementHistoryAvailable = true;
+        }
+        if (catalogueResult.error) {
+            const catalogueError = String(catalogueResult.error.message || "").toLowerCase();
+            const catalogueRelationMissing = catalogueResult.error.code === "42P01" ||
+                catalogueError.includes("fashion_catalogue") &&
+                (catalogueError.includes("does not exist") || catalogueError.includes("could not find") || catalogueError.includes("schema cache"));
+            state.catalogue = [];
+            state.catalogueAvailable = false;
+            state.catalogueMessage = catalogueRelationMissing
+                ? "Review fashion-catalogue-schema.sql and the existing private image policies before enabling catalogue management."
+                : `Catalogue unavailable: ${catalogueResult.error.message}`;
+        } else {
+            state.catalogue = catalogueResult.data || [];
+            state.catalogueAvailable = true;
+            state.catalogueMessage = "";
+        }
+        const expensesErrorText = String(expensesResult.error?.message || "").toLowerCase();
+        if (expensesResult.error) {
+            const missingExpensesTable = expensesResult.error.code === "42P01" ||
+                expensesErrorText.includes("business_expenses") &&
+                (expensesErrorText.includes("does not exist") || expensesErrorText.includes("could not find") || expensesErrorText.includes("schema cache"));
+            state.expenses = [];
+            state.expensesAvailable = false;
+            state.expensesMessage = missingExpensesTable
+                ? "Review business-operations-migration.sql to enable expenses."
+                : `Expenses unavailable: ${expensesResult.error.message}`;
+        } else {
+            state.expenses = expensesResult.data || [];
+            state.expensesAvailable = true;
+            state.expensesMessage = "";
+        }
+        const inventoryErrorText = String(inventoryResult.error?.message || "").toLowerCase();
+        if (inventoryResult.error) {
+            const missingInventoryTable = inventoryResult.error.code === "42P01" ||
+                inventoryErrorText.includes("inventory_items") &&
+                (inventoryErrorText.includes("does not exist") || inventoryErrorText.includes("could not find") || inventoryErrorText.includes("schema cache"));
+            const missingInventoryFields = ["selling_price", "low_stock_threshold", "description"]
+                .some((field) => inventoryErrorText.includes(field));
+            state.inventory = [];
+            state.inventoryAvailable = false;
+            state.inventoryMessage = missingInventoryTable
+                ? "Review business-operations-migration.sql to create inventory."
+                : missingInventoryFields
+                    ? "Inventory needs selling_price, low_stock_threshold, and description columns. Review business-operations-migration.sql before applying the additive update."
+                    : `Inventory unavailable: ${inventoryResult.error.message}`;
+        } else {
+            state.inventory = inventoryResult.data || [];
+            state.inventoryAvailable = true;
+            state.inventoryMessage = "";
+        }
         customerMap.clear();
         orderMap.clear();
         state.customers.forEach((customer) => customerMap.set(customer.id, customer));
@@ -546,6 +816,9 @@ async function startDashboard() {
         renderMeasurements();
         renderPayments();
         renderDashboardStats();
+        renderBusinessOperations();
+        renderNotifications();
+        renderCatalogue().catch(showWorkspaceError);
         if (selectedCustomerId) {
             renderCustomerProfile().catch((error) => {
                 setWorkspaceMessage(`Unable to load the customer profile: ${error.message}`, true);
@@ -555,22 +828,171 @@ async function startDashboard() {
 
     function renderCustomers() {
         const query = document.querySelector("#customer-search").value.trim().toLowerCase();
-        const rows = state.customers.filter((customer) =>
+        const customers = state.customers.filter((customer) =>
             `${customer.full_name || ""} ${customer.phone || ""}`.toLowerCase().includes(query)
         );
-        const body = document.querySelector("#customers-table");
-        body.replaceChildren();
-        rows.forEach((customer) => {
-            const row = document.createElement("tr");
-            appendCell(row, customer.full_name);
-            appendCell(row, customer.phone);
-            appendCell(row, customer.address);
-            appendCell(row, formatDate(customer.created_at));
-            appendCell(row, customer.notes);
-            appendActions(row, customer.id, ["view-customer", "edit-customer", "delete-customer"]);
-            body.append(row);
+        const container = document.querySelector("#customer-cards");
+        container.replaceChildren();
+        customers.forEach((customer) => {
+            const card = document.createElement("article");
+            card.className = "customer-card";
+
+            const heading = document.createElement("div");
+            heading.className = "customer-card-heading";
+            const identity = document.createElement("div");
+            identity.className = "customer-card-identity";
+            const name = customer.full_name || "Unnamed customer";
+            const title = document.createElement("h3");
+            title.textContent = name;
+            const initials = document.createElement("span");
+            initials.className = "customer-card-initials";
+            initials.setAttribute("aria-hidden", "true");
+            initials.textContent = String(name).trim().slice(0, 1).toUpperCase() || "?";
+            if (customer.photo_path) {
+                const photo = document.createElement("img");
+                photo.className = "customer-card-photo";
+                photo.alt = `${name} photograph`;
+                photo.loading = "lazy";
+                photo.onerror = () => {
+                    if (photo.isConnected) photo.replaceWith(initials);
+                };
+                getPrivateImageUrl(customer.photo_path).then((url) => {
+                    if (photo.isConnected) photo.src = url;
+                }).catch(() => {
+                    if (photo.isConnected) photo.replaceWith(initials);
+                });
+                heading.append(photo);
+            } else {
+                heading.append(initials);
+            }
+            identity.append(title);
+            heading.append(identity);
+            card.append(heading);
+
+            const metadata = document.createElement("div");
+            metadata.className = "customer-card-meta";
+            const appendMetadata = (label, value) => {
+                const text = String(value ?? "").trim();
+                if (!text) return;
+                const line = document.createElement("p");
+                const labelElement = document.createElement("strong");
+                labelElement.textContent = `${label}: `;
+                line.append(labelElement, document.createTextNode(text));
+                metadata.append(line);
+            };
+            appendMetadata("Phone", customer.phone);
+            appendMetadata("Address", customer.address);
+            if (customer.created_at) appendMetadata("Registered", formatDate(customer.created_at));
+            if (metadata.childElementCount) card.append(metadata);
+
+            appendCustomerCardMeasurements(card, customer);
+            const actions = document.createElement("div");
+            actions.className = "customer-card-actions";
+            appendCustomerCardActions(actions, customer.id);
+            card.append(actions);
+            container.append(card);
         });
-        showEmpty("#customers-empty", rows.length === 0);
+        showEmpty("#customers-empty", customers.length === 0);
+    }
+
+    function appendCustomerCardActions(container, customerId) {
+        [
+            ["view-customer", "View"],
+            ["edit-customer", "Edit"],
+            ["delete-customer", "Delete"]
+        ].forEach(([action, label]) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `action-button${action === "delete-customer" ? " danger" : ""}`;
+            button.dataset.action = action;
+            button.dataset.id = customerId;
+            button.textContent = label;
+            container.append(button);
+        });
+    }
+
+    function appendCustomerCardMeasurements(card, customer) {
+        const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== "";
+        const groups = [];
+        const customerEntries = [];
+        const measurementSet = getMeasurementSet(customer.id);
+        if (measurementSet) {
+            MEASUREMENT_SECTIONS.forEach((section) => {
+                section.fields.forEach(([key, label]) => {
+                    const value = measurementSet.measurements?.[key];
+                    if (hasValue(value)) customerEntries.push({ label, value, unit: measurementSet.unit });
+                });
+            });
+        }
+        state.measurements
+            .filter((measurement) => measurement.customer_id === customer.id &&
+                hasValue(measurement.measurement_name) && hasValue(measurement.measurement_value))
+            .forEach((measurement) => {
+                const key = legacyMeasurementKey(measurement.measurement_name);
+                const currentValue = key ? measurementSet?.measurements?.[key] : null;
+                const sameUnit = measurementSet && measurementUnitCode(measurementSet.unit) === measurementUnitCode(measurement.unit);
+                if (hasValue(currentValue) && Number(currentValue) === Number(measurement.measurement_value) && sameUnit) return;
+                customerEntries.push({
+                    label: measurementSet && key ? `Previous ${measurement.measurement_name}` : measurement.measurement_name,
+                    value: measurement.measurement_value,
+                    unit: measurement.unit
+                });
+            });
+        if (customerEntries.length) groups.push({ title: "Customer measurements", entries: customerEntries });
+
+        state.orders
+            .filter((order) => order.customer_id === customer.id && order.measurement_data?.values)
+            .forEach((order) => {
+                const unit = measurementUnitCode(order.measurement_data.unit) || order.measurement_data.unit;
+                const entries = [];
+                MEASUREMENT_SECTIONS.forEach((section) => {
+                    section.fields.forEach(([key, label]) => {
+                        const value = order.measurement_data.values[key];
+                        if (hasValue(value)) entries.push({ label, value, unit });
+                    });
+                });
+                if (entries.length) {
+                    const garment = [order.clothing_type, order.style_name || order.clothing_style].filter(Boolean).join(" — ");
+                    groups.push({ title: garment ? `Garment · ${garment}` : "Garment measurements", entries });
+                }
+            });
+
+        const details = document.createElement("details");
+        details.className = "customer-card-measurements";
+        const summary = document.createElement("summary");
+        summary.textContent = "View Measurements";
+        details.append(summary);
+        const content = document.createElement("div");
+        content.className = "customer-card-measurement-content";
+        if (!groups.length) {
+            const empty = document.createElement("p");
+            empty.className = "customer-card-no-measurements";
+            empty.textContent = "No measurements saved yet.";
+            content.append(empty);
+        } else {
+            groups.forEach((group) => {
+                const section = document.createElement("section");
+                section.className = "customer-card-measurement-group";
+                const heading = document.createElement("h4");
+                heading.textContent = group.title;
+                const grid = document.createElement("div");
+                grid.className = "customer-card-measurement-grid";
+                group.entries.forEach((entry) => {
+                    const measurement = document.createElement("div");
+                    measurement.className = "customer-card-measurement";
+                    const label = document.createElement("strong");
+                    label.textContent = entry.label;
+                    const value = document.createElement("span");
+                    value.textContent = `${entry.value}${hasValue(entry.unit) ? ` ${entry.unit}` : ""}`;
+                    measurement.append(label, value);
+                    grid.append(measurement);
+                });
+                section.append(heading, grid);
+                content.append(section);
+            });
+        }
+        details.append(content);
+        card.append(details);
     }
 
     function appendLegacyMeasurementRow(measurement, body, includeCustomer) {
@@ -725,6 +1147,26 @@ async function startDashboard() {
 
         const details = document.querySelector("#customer-profile-details");
         details.replaceChildren();
+        const photoWrapper = document.createElement("div");
+        const photoLabel = document.createElement("dt");
+        const photoDescription = document.createElement("dd");
+        photoLabel.textContent = "Customer photograph";
+        if (customer.photo_path) {
+            const photo = document.createElement("img");
+            photo.className = "customer-profile-photo";
+            photo.alt = `${customer.full_name || "Customer"} photograph`;
+            photo.loading = "lazy";
+            photoDescription.append(photo);
+            getPrivateImageUrl(customer.photo_path).then((url) => {
+                if (photo.isConnected) photo.src = url;
+            }).catch((error) => {
+                if (photo.isConnected) photo.alt = `Photograph unavailable: ${error.message}`;
+            });
+        } else {
+            photoDescription.textContent = "No photograph";
+        }
+        photoWrapper.append(photoLabel, photoDescription);
+        details.append(photoWrapper);
         [
             ["Phone", customer.phone],
             ["Address", customer.address],
@@ -748,6 +1190,24 @@ async function startDashboard() {
         measurements.forEach((measurement) => appendLegacyMeasurementRow(measurement, measurementBody, false));
         showEmpty("#profile-measurements-empty", measurements.length === 0 && measurementSets.length === 0);
 
+        const historyBody = document.querySelector("#profile-measurement-history");
+        historyBody.replaceChildren();
+        const measurementHistory = state.measurementHistory.filter((entry) => entry.customer_id === customer.id);
+        measurementHistory.forEach((entry) => {
+            const row = document.createElement("tr");
+            appendCell(row, formatDate(entry.recorded_at));
+            appendCell(row, entry.unit);
+            appendCell(row, Object.entries(entry.measurements || {})
+                .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`)
+                .join(" · "));
+            appendCell(row, entry.notes);
+            historyBody.append(row);
+        });
+        document.querySelector("#profile-measurement-history-note").textContent = state.measurementHistoryAvailable
+            ? "Previous customer measurement sets are kept when a set is updated."
+            : "Review measurement-history-migration.sql to enable dated snapshots of previous measurement sets.";
+        showEmpty("#profile-measurement-history-empty", measurementHistory.length === 0);
+
         const orders = state.orders.filter((item) => item.customer_id === customer.id);
         const totals = orders.reduce((summary, order) => ({
             total: summary.total + Number(order.total_amount || 0),
@@ -765,7 +1225,7 @@ async function startDashboard() {
             const title = document.createElement("h4");
             title.textContent = [order.clothing_type, order.style_name || order.clothing_style].filter(Boolean).join(" — ");
             const info = document.createElement("p");
-            info.textContent = `Status: ${order.status || "Pending"} · Collection: ${formatDate(order.collection_date)} · Material received: ${formatDate(order.material_received_date)}`;
+            info.textContent = `Status: ${order.status || "Pending"} · Progress: ${progressStageLabel(order)} · Collection: ${formatDate(order.collection_date)} · Material received: ${formatDate(order.material_received_date)}`;
             const price = document.createElement("p");
             price.textContent = `Total ${formatMoney(order.total_amount)} · Paid ${formatMoney(order.amount_paid)} · Balance ${formatMoney(balance(order))}`;
             card.append(title, info, price);
@@ -795,6 +1255,22 @@ async function startDashboard() {
             await appendOrderImages(images, order);
             const actions = document.createElement("div");
             actions.className = "profile-actions";
+            appendWhatsAppAction(actions, customer?.phone,
+                `Hello ${customer?.full_name || "there"}, your ${order.style_name || order.clothing_type || "garment"} order has been recorded. Expected collection: ${formatDate(order.collection_date)}.`,
+                "Order confirmation");
+            const latestPayment = state.payments
+                .filter((payment) => payment.order_id === order.id)
+                .sort((left, right) => String(right.created_at || right.payment_date).localeCompare(String(left.created_at || left.payment_date)))[0];
+            if (latestPayment) {
+                appendWhatsAppAction(actions, customer?.phone,
+                    `Hello ${customer?.full_name || "there"}, we received ${formatMoney(latestPayment.amount)} for your ${order.style_name || order.clothing_type || "garment"} on ${formatDate(latestPayment.payment_date)}. Remaining balance: ${formatMoney(balance(order))}.`,
+                    "Payment confirmation");
+            }
+            if (String(order.status || "").toLowerCase() === "completed" || order.progress_stage === "ready_for_collection") {
+                appendWhatsAppAction(actions, customer?.phone,
+                    `Hello ${customer?.full_name || "there"}, your ${order.style_name || order.clothing_type || "garment"} is ready for collection. Please contact us to arrange collection.`,
+                    "Ready for collection");
+            }
             appendActionButton(actions, "view-order", order.id, "Details");
             appendActionButton(actions, "edit-order", order.id, "Edit");
             appendActionButton(actions, "delete-order", order.id, "Delete");
@@ -817,7 +1293,14 @@ async function startDashboard() {
         history.className = "garment-payment-history";
         transactions.forEach((payment) => {
             const item = document.createElement("li");
-            item.textContent = `${formatDate(payment.payment_date)} · ${formatMoney(payment.amount)}${payment.method ? ` · ${payment.method}` : ""}`;
+            const description = document.createElement("span");
+            description.textContent = `${formatDate(payment.payment_date)} · ${formatMoney(payment.amount)}${payment.method ? ` · ${payment.method}` : ""}`;
+            const receiptButton = document.createElement("button");
+            receiptButton.type = "button";
+            receiptButton.className = "action-button";
+            receiptButton.dataset.receiptPayment = payment.id;
+            receiptButton.textContent = "Print receipt";
+            item.replaceChildren(description, receiptButton);
             history.append(item);
         });
         if (!transactions.length) {
@@ -957,30 +1440,543 @@ async function startDashboard() {
     }
 
     function renderDashboardStats() {
-        const activeOrders = state.orders.filter((order) =>
-            !["completed", "cancelled", "collected"].includes(String(order.status || "").toLowerCase())
-        );
-        const readyOrders = state.orders.filter((order) => String(order.status || "").toLowerCase() === "completed");
-        const completedOrders = state.orders.filter((order) => ["completed", "collected"].includes(String(order.status || "").toLowerCase()));
+        const getStatus = (order) => String(order.status || "pending").toLowerCase();
+        const readyOrders = state.orders.filter((order) => getStatus(order) === "completed" || order.progress_stage === "ready_for_collection");
+        const completedOrders = state.orders.filter((order) => ["completed", "collected"].includes(getStatus(order)));
         const outstanding = state.orders.reduce((sum, order) => sum + balance(order), 0);
         document.querySelector("#stat-customers").textContent = String(state.customers.length);
-        document.querySelector("#stat-orders").textContent = String(activeOrders.length);
+        document.querySelector("#stat-orders").textContent = String(state.orders.length);
+        document.querySelector("#stat-pending").textContent = String(state.orders.filter((order) => getStatus(order) === "pending").length);
+        document.querySelector("#stat-in-progress").textContent = String(state.orders.filter((order) => getStatus(order) === "in_progress").length);
         document.querySelector("#stat-ready").textContent = String(readyOrders.length);
         document.querySelector("#stat-completed").textContent = String(completedOrders.length);
         document.querySelector("#stat-balance").textContent = formatMoney(outstanding);
+        document.querySelector("#stat-payments").textContent = state.paymentHistoryAvailable
+            ? formatMoney(state.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0))
+            : "Unavailable";
 
         const body = document.querySelector("#recent-orders");
         body.replaceChildren();
         state.orders.slice(0, 5).forEach((order) => {
             const row = document.createElement("tr");
             appendCell(row, customerMap.get(order.customer_id)?.full_name || "Unknown customer");
-            appendCell(row, order.clothing_style);
+            appendCell(row, order.style_name || order.clothing_style || order.clothing_type);
             appendCell(row, formatDate(order.created_at));
             appendCell(row, formatDate(order.collection_date));
             appendCell(row, order.status);
+            appendCell(row, progressStageLabel(order));
             body.append(row);
         });
         showEmpty("#recent-orders-empty", state.orders.length === 0);
+
+        const recentCustomers = document.querySelector("#recent-customers");
+        recentCustomers.replaceChildren();
+        state.customers.slice(0, 5).forEach((customer) => {
+            const row = document.createElement("tr");
+            appendCell(row, customer.full_name);
+            appendCell(row, customer.phone);
+            appendCell(row, formatDate(customer.created_at));
+            recentCustomers.append(row);
+        });
+        showEmpty("#recent-customers-empty", state.customers.length === 0);
+
+        const collectionList = document.querySelector("#collection-reminders");
+        collectionList.replaceChildren();
+        const dueOrders = state.orders
+            .filter((order) => order.collection_date && !["cancelled", "collected"].includes(getStatus(order)) && order.progress_stage !== "collected")
+            .sort((left, right) => String(left.collection_date).localeCompare(String(right.collection_date)));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        dueOrders.slice(0, 8).forEach((order) => {
+            const collectionDate = new Date(`${String(order.collection_date).slice(0, 10)}T00:00:00`);
+            if (Number.isNaN(collectionDate.valueOf())) return;
+            const daysUntilCollection = Math.round((collectionDate - today) / 86400000);
+            const listItem = document.createElement("li");
+            const details = document.createElement("div");
+            details.className = "collection-details";
+            const customer = document.createElement("strong");
+            customer.textContent = customerMap.get(order.customer_id)?.full_name || "Unknown customer";
+            const garment = document.createElement("span");
+            garment.textContent = [order.clothing_type, order.style_name || order.clothing_style].filter(Boolean).join(" · ") || "Order";
+            const date = document.createElement("span");
+            date.className = `collection-date${daysUntilCollection < 0 ? " is-overdue" : ""}`;
+            date.textContent = `${daysUntilCollection < 0 ? "Overdue" : daysUntilCollection === 0 ? "Due today" : daysUntilCollection === 1 ? "Due tomorrow" : "Upcoming"} · ${formatDate(order.collection_date)}`;
+            details.append(customer, garment);
+            listItem.append(details, date);
+            const customerRecord = customerMap.get(order.customer_id);
+            appendWhatsAppAction(listItem, customerRecord?.phone,
+                `Hello ${customerRecord?.full_name || "there"}, this is a reminder about your ${order.style_name || order.clothing_type || "garment"} collection scheduled for ${formatDate(order.collection_date)}.`,
+                "Open WhatsApp");
+            collectionList.append(listItem);
+        });
+        showEmpty("#collection-reminders-empty", collectionList.children.length === 0);
+    }
+
+    function renderBusinessOperations() {
+        const expensesMessage = document.querySelector("#expenses-message");
+        const inventoryMessage = document.querySelector("#inventory-message");
+        const reportsMessage = document.querySelector("#reports-message");
+        expensesMessage.textContent = state.expensesAvailable ? "" : state.expensesMessage;
+        inventoryMessage.textContent = state.inventoryAvailable ? "" : state.inventoryMessage;
+        document.querySelector('[data-action="add-expense"]').disabled = !state.expensesAvailable;
+        document.querySelector('[data-action="add-inventory"]').disabled = !state.inventoryAvailable;
+
+        const expenseTable = document.querySelector("#expenses-table");
+        expenseTable.replaceChildren();
+        state.expenses.forEach((expense) => {
+            const row = document.createElement("tr");
+            appendCell(row, formatDate(expense.expense_date));
+            appendCell(row, expense.expense_name);
+            appendCell(row, expense.category);
+            appendCell(row, formatMoney(expense.amount));
+            appendCell(row, expense.description);
+            appendActions(row, expense.id, ["edit-expense", "delete-expense"]);
+            expenseTable.append(row);
+        });
+        document.querySelector("#expenses-total").textContent = state.expensesAvailable
+            ? formatMoney(state.expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0))
+            : "Unavailable";
+        showEmpty("#expenses-empty", state.expenses.length === 0);
+
+        const inventoryTable = document.querySelector("#inventory-table");
+        inventoryTable.replaceChildren();
+        state.inventory.forEach((item) => {
+            const row = document.createElement("tr");
+            appendCell(row, item.item_name);
+            appendCell(row, item.category);
+            appendCell(row, item.quantity);
+            appendCell(row, item.unit);
+            appendCell(row, formatMoney(item.purchase_price));
+            appendCell(row, item.selling_price === null ? "—" : formatMoney(item.selling_price));
+            appendCell(row, item.low_stock_threshold);
+            appendCell(row, formatDate(item.created_at));
+            appendCell(row, item.description);
+            appendCell(row, item.supplier);
+            appendActions(row, item.id, ["edit-inventory", "delete-inventory"]);
+            row.classList.toggle("is-low-stock", Number(item.quantity) <= Number(item.low_stock_threshold ?? 5));
+            inventoryTable.append(row);
+        });
+        document.querySelector("#inventory-low-stock").textContent = state.inventoryAvailable
+            ? String(state.inventory.filter((item) => Number(item.quantity) <= Number(item.low_stock_threshold ?? 5)).length)
+            : "Unavailable";
+        showEmpty("#inventory-empty", state.inventory.length === 0);
+
+        const startDate = document.querySelector("#report-start-date").value;
+        const endDate = document.querySelector("#report-end-date").value;
+        const withinRange = (value) => {
+            const date = String(value || "").slice(0, 10);
+            return Boolean(date && (!startDate || date >= startDate) && (!endDate || date <= endDate));
+        };
+        const periodPayments = state.payments.filter((payment) => withinRange(payment.payment_date));
+        const periodExpenses = state.expenses.filter((expense) => withinRange(expense.expense_date));
+        const periodOrders = state.orders.filter((order) => withinRange(order.created_at));
+        const income = periodPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        const expenses = periodExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+        const outstanding = periodOrders.reduce((sum, order) => sum + balance(order), 0);
+        const completed = periodOrders.filter((order) => ["completed", "collected"].includes(String(order.status || "").toLowerCase())).length;
+        document.querySelector("#report-income").textContent = state.paymentHistoryAvailable
+            ? formatMoney(income) : "Unavailable";
+        document.querySelector("#report-expenses").textContent = state.expensesAvailable
+            ? formatMoney(expenses) : "Unavailable";
+        document.querySelector("#report-profit").textContent = state.paymentHistoryAvailable && state.expensesAvailable
+            ? formatMoney(income - expenses) : "Unavailable";
+        document.querySelector("#report-completed").textContent = String(completed);
+        document.querySelector("#report-outstanding").textContent = formatMoney(outstanding);
+        reportsMessage.textContent = !state.expensesAvailable
+            ? state.expensesMessage
+            : !state.paymentHistoryAvailable
+                ? "Payment history is unavailable; income and estimated profit cannot be calculated."
+                : "";
+    }
+
+    function renderNotifications() {
+        const notifications = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const recentCutoff = new Date(today);
+        recentCutoff.setDate(recentCutoff.getDate() - 7);
+
+        state.orders.forEach((order) => {
+            const status = String(order.status || "").toLowerCase();
+            const customer = customerMap.get(order.customer_id);
+            const garment = order.style_name || order.clothing_type || "Garment order";
+            if (order.collection_date && !["cancelled", "collected"].includes(status) && order.progress_stage !== "collected") {
+                const dueDate = new Date(`${String(order.collection_date).slice(0, 10)}T00:00:00`);
+                const daysUntil = Math.round((dueDate - today) / 86400000);
+                if (!Number.isNaN(dueDate.valueOf()) && daysUntil <= 7) {
+                    notifications.push({
+                        id: `collection:${order.id}:${order.collection_date}`,
+                        category: daysUntil < 0 ? "Overdue collection" : "Upcoming collection",
+                        message: `${customer?.full_name || "Customer"} · ${garment} · ${formatDate(order.collection_date)}`
+                    });
+                }
+            }
+            const due = balance(order);
+            if (due > 0) {
+                notifications.push({
+                    id: `balance:${order.id}:${due}`,
+                    category: "Outstanding balance",
+                    message: `${customer?.full_name || "Customer"} · ${garment} · ${formatMoney(due)} due`
+                });
+            }
+            const createdAt = new Date(order.created_at || "");
+            if (["completed", "collected"].includes(status) && !Number.isNaN(createdAt.valueOf()) && createdAt >= recentCutoff) {
+                notifications.push({
+                    id: `completed:${order.id}:${order.created_at}`,
+                    category: "Recently completed",
+                    message: `${customer?.full_name || "Customer"} · ${garment}`
+                });
+            }
+        });
+
+        if (state.inventoryAvailable) {
+            state.inventory.filter((item) => Number(item.quantity) <= Number(item.low_stock_threshold ?? 5)).forEach((item) => {
+                notifications.push({
+                    id: `inventory:${item.id}:${item.quantity}`,
+                    category: "Low stock",
+                    message: `${item.item_name} · ${item.quantity} ${item.unit} remaining`
+                });
+            });
+        }
+
+        const list = document.querySelector("#notification-list");
+        list.replaceChildren();
+        notifications.forEach((notification) => {
+            const isRead = state.notificationReadIds.has(notification.id);
+            const row = document.createElement("li");
+            row.classList.toggle("is-read", isRead);
+            const copy = document.createElement("div");
+            copy.className = "notification-copy";
+            const category = document.createElement("strong");
+            category.textContent = notification.category;
+            const description = document.createElement("span");
+            description.textContent = notification.message;
+            copy.append(category, description);
+            const markRead = document.createElement("button");
+            markRead.type = "button";
+            markRead.className = "action-button";
+            markRead.dataset.notificationId = notification.id;
+            markRead.textContent = isRead ? "Read" : "Mark read";
+            markRead.disabled = isRead;
+            row.append(copy, markRead);
+            list.append(row);
+        });
+        const unreadCount = notifications.filter((notification) => !state.notificationReadIds.has(notification.id)).length;
+        document.querySelector("#notification-count").textContent = String(unreadCount);
+        showEmpty("#notification-empty", notifications.length === 0);
+    }
+
+    async function printPaymentReceipt(paymentId) {
+        const payment = state.payments.find((entry) => entry.id === paymentId);
+        const order = payment ? orderMap.get(payment.order_id) : null;
+        const customer = order ? customerMap.get(order.customer_id) : null;
+        if (!payment || !order || !customer) {
+            throw new Error("This saved payment could not be matched to its customer and order.");
+        }
+
+        const orderPayments = state.payments
+            .filter((entry) => entry.order_id === order.id)
+            .sort((left, right) => {
+                const leftDate = new Date(left.created_at || left.payment_date).valueOf();
+                const rightDate = new Date(right.created_at || right.payment_date).valueOf();
+                return leftDate - rightDate || String(left.id).localeCompare(String(right.id));
+            });
+        const paymentIndex = orderPayments.findIndex((entry) => entry.id === payment.id);
+        const totalRecorded = orderPayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+        const amountBeforeRecords = Math.max(0, Number(order.amount_paid || 0) - totalRecorded);
+        const paidToDate = amountBeforeRecords + orderPayments
+            .slice(0, paymentIndex + 1)
+            .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+        const previousPaid = Math.max(0, paidToDate - Number(payment.amount || 0));
+        const outstanding = Math.max(0, Number(order.total_amount || 0) - paidToDate);
+
+        const profile = await getTailorProfile();
+        const businessName = profile?.shop_name || state.user.user_metadata?.shop_name || "TailorDesk";
+        const businessPhone = state.user.user_metadata?.phone || "";
+        const elements = {
+            "receipt-business-name": businessName,
+            "receipt-business-contact": [businessPhone, state.user.email].filter(Boolean).join(" · "),
+            "receipt-number": `TD-${String(payment.id).toUpperCase()}`,
+            "receipt-customer-name": customer.full_name || "Customer",
+            "receipt-customer-phone": customer.phone || "",
+            "receipt-payment-date": formatDate(payment.payment_date),
+            "receipt-garment": [order.clothing_type, order.style_name || order.clothing_style].filter(Boolean).join(" · ") || "Garment order",
+            "receipt-total": formatMoney(order.total_amount),
+            "receipt-previous": formatMoney(previousPaid),
+            "receipt-current": formatMoney(payment.amount),
+            "receipt-paid-total": formatMoney(paidToDate),
+            "receipt-balance": formatMoney(outstanding),
+            "receipt-method": payment.method || "Not specified",
+            "receipt-footer-business": businessName
+        };
+        Object.entries(elements).forEach(([id, value]) => {
+            document.querySelector(`#${id}`).textContent = value;
+        });
+        document.querySelector("#print-receipt").hidden = false;
+        document.body.classList.add("printing-receipt");
+        window.print();
+    }
+
+    function clearPrintedReceipt() {
+        document.body.classList.remove("printing-receipt");
+        document.querySelector("#print-receipt").hidden = true;
+    }
+
+    async function renderCatalogue() {
+        const message = document.querySelector("#catalogue-message");
+        const empty = document.querySelector("#catalogue-empty");
+        const showcase = document.querySelector("#catalogue-showcase");
+        const management = document.querySelector("#catalogue-management");
+        const addButtons = document.querySelectorAll("#catalogue-add-design, #catalogue-add-first");
+        addButtons.forEach((button) => { button.disabled = !state.catalogueAvailable; });
+        message.textContent = state.catalogueMessage;
+        management.replaceChildren();
+
+        if (!state.catalogueAvailable || state.catalogue.length === 0) {
+            state.catalogueIndex = 0;
+            empty.hidden = false;
+            showcase.hidden = true;
+            clearInterval(state.catalogueTimer);
+            state.catalogueTimer = null;
+            document.querySelector("#catalogue-pause").hidden = true;
+            return;
+        }
+
+        empty.hidden = true;
+        showcase.hidden = false;
+        state.catalogueIndex = ((state.catalogueIndex % state.catalogue.length) + state.catalogue.length) % state.catalogue.length;
+        const activeDesign = state.catalogue[state.catalogueIndex];
+        const activeUrl = await getPrivateImageUrl(activeDesign.image_path);
+        const image = document.querySelector("#catalogue-image");
+        image.src = activeUrl;
+        image.alt = activeDesign.design_name;
+        document.querySelector("#catalogue-name").textContent = activeDesign.design_name;
+        document.querySelector("#catalogue-category").textContent = activeDesign.category;
+        document.querySelector("#catalogue-description").textContent = activeDesign.description || "No description added.";
+        document.querySelector("#catalogue-price").textContent = formatMoney(activeDesign.price);
+        document.querySelector("#catalogue-view-design").dataset.designId = activeDesign.id;
+
+        const indicators = document.querySelector("#catalogue-indicators");
+        indicators.replaceChildren();
+        state.catalogue.forEach((design, index) => {
+            const indicator = document.createElement("button");
+            indicator.type = "button";
+            indicator.dataset.index = String(index);
+            indicator.setAttribute("aria-label", `Show ${design.design_name}`);
+            indicator.setAttribute("aria-current", String(index === state.catalogueIndex));
+            indicators.append(indicator);
+        });
+
+        for (const design of state.catalogue) {
+            const row = document.createElement("article");
+            row.className = "catalogue-item";
+            const thumbnail = document.createElement("img");
+            thumbnail.alt = "";
+            thumbnail.loading = "lazy";
+            try {
+                thumbnail.src = await getPrivateImageUrl(design.image_path);
+            } catch (error) {
+                thumbnail.alt = "Image unavailable";
+            }
+            const details = document.createElement("div");
+            details.className = "catalogue-item-details";
+            const name = document.createElement("strong");
+            name.textContent = design.design_name;
+            const category = document.createElement("span");
+            category.textContent = `${design.category} · ${formatMoney(design.price)}`;
+            details.append(name, category);
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "action-button";
+            edit.dataset.catalogueAction = "edit";
+            edit.dataset.id = design.id;
+            edit.textContent = "Edit";
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "action-button danger";
+            remove.dataset.catalogueAction = "delete";
+            remove.dataset.id = design.id;
+            remove.textContent = "Delete";
+            row.append(thumbnail, details, edit, remove);
+            management.append(row);
+        }
+
+        document.querySelector("#catalogue-pause").hidden = state.catalogue.length < 2;
+        updateCatalogueTimer();
+    }
+
+    async function getPrivateImageUrl(path) {
+        const cached = state.privateImageUrls.get(path);
+        if (cached && cached.expiresAt > Date.now()) return cached.url;
+        const { data, error } = await supabaseClient.storage
+            .from("tailordesk-order-images")
+            .createSignedUrl(path, 3600);
+        if (error) throw error;
+        const entry = { url: data.signedUrl, expiresAt: Date.now() + 3500000 };
+        state.privateImageUrls.set(path, entry);
+        return entry.url;
+    }
+
+    function updateCatalogueTimer() {
+        clearInterval(state.catalogueTimer);
+        state.catalogueTimer = null;
+        if (state.catalogue.length < 2 || state.cataloguePaused) return;
+        state.catalogueTimer = window.setInterval(() => {
+            state.catalogueIndex = (state.catalogueIndex + 1) % state.catalogue.length;
+            renderCatalogue().catch(showWorkspaceError);
+        }, 1500);
+    }
+
+    function changeCatalogueSlide(direction) {
+        if (!state.catalogue.length) return;
+        state.catalogueIndex = (state.catalogueIndex + direction + state.catalogue.length) % state.catalogue.length;
+        renderCatalogue().catch(showWorkspaceError);
+    }
+
+    function toggleCatalogueSlideshow() {
+        state.cataloguePaused = !state.cataloguePaused;
+        const button = document.querySelector("#catalogue-pause");
+        button.textContent = state.cataloguePaused ? "Resume slideshow" : "Pause slideshow";
+        button.setAttribute("aria-pressed", String(state.cataloguePaused));
+        updateCatalogueTimer();
+    }
+
+    async function openCatalogueDialog(design = null) {
+        if (!state.catalogueAvailable) {
+            setWorkspaceMessage(state.catalogueMessage || "Catalogue setup is unavailable.", true);
+            return;
+        }
+        state.catalogueEditingId = design?.id || null;
+        catalogueForm.reset();
+        catalogueForm.elements.design_name.value = design?.design_name || "";
+        catalogueForm.elements.category.value = design?.category || "";
+        catalogueForm.elements.description.value = design?.description || "";
+        catalogueForm.elements.price.value = String(design?.price ?? 0);
+        document.querySelector("#catalogue-dialog-title").textContent = design ? "Edit design" : "Add design";
+        document.querySelector("#catalogue-dialog-submit").textContent = design ? "Save changes" : "Save design";
+        document.querySelector("#catalogue-dialog-message").textContent = design?.image_path ? "Leave the image blank to keep the current photograph." : "";
+        catalogueDialog.showModal();
+    }
+
+    async function saveCatalogueRecord(event) {
+        event.preventDefault();
+        if (!state.catalogueAvailable) return;
+        const submit = document.querySelector("#catalogue-dialog-submit");
+        const message = document.querySelector("#catalogue-dialog-message");
+        const design = state.catalogue.find((entry) => entry.id === state.catalogueEditingId) || null;
+        const values = Object.fromEntries(new FormData(catalogueForm).entries());
+        const file = catalogueForm.elements.image.files[0];
+        const price = Number(values.price);
+        if (!Number.isFinite(price) || price < 0) {
+            message.textContent = "Enter a valid non-negative design price.";
+            return;
+        }
+        if (!design && !file) {
+            message.textContent = "Choose a design photograph.";
+            return;
+        }
+
+        submit.disabled = true;
+        message.textContent = "Saving design...";
+        let uploadedPath = null;
+        try {
+            const ownerId = await getVerifiedTailorId();
+            const designId = design?.id || crypto.randomUUID();
+            let imagePath = design?.image_path || null;
+            if (file) {
+                const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+                if (!allowedTypes.includes(file.type)) throw new Error("Choose a JPEG, PNG, WebP, or GIF image.");
+                if (file.size > 8 * 1024 * 1024) throw new Error("Each catalogue image must be 8 MB or smaller.");
+                const extension = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }[file.type];
+                const path = `${ownerId}/catalogue/${designId}/${crypto.randomUUID()}.${extension}`;
+                const { data, error } = await supabaseClient.storage
+                    .from("tailordesk-order-images")
+                    .upload(path, file, { contentType: file.type, upsert: false });
+                if (error) throw error;
+                uploadedPath = data.path;
+                imagePath = data.path;
+            }
+
+            const payload = {
+                id: designId,
+                tailor_id: ownerId,
+                design_name: String(values.design_name || "").trim(),
+                category: String(values.category || "").trim(),
+                description: String(values.description || "").trim() || null,
+                price,
+                image_path: imagePath,
+                updated_at: new Date().toISOString()
+            };
+            const query = design
+                ? supabaseClient.from("fashion_catalogue").update(payload).eq("id", design.id).eq("tailor_id", ownerId).select("id").maybeSingle()
+                : supabaseClient.from("fashion_catalogue").insert(payload).select("id").single();
+            const { data, error } = await query;
+            if (error) throw error;
+            if (!data) throw new Error("No catalogue record was saved. Check that you can access this design.");
+            uploadedPath = null;
+
+            const replacedImage = file ? design?.image_path : null;
+            if (replacedImage) {
+                const { error: removeError } = await supabaseClient.storage
+                    .from("tailordesk-order-images")
+                    .remove([replacedImage]);
+                if (removeError) message.textContent = `Design saved, but its previous image could not be removed: ${removeError.message}`;
+                else state.privateImageUrls.delete(replacedImage);
+            }
+            state.privateImageUrls.delete(imagePath);
+            state.catalogueIndex = 0;
+            catalogueDialog.close();
+            await loadWorkspace();
+            setWorkspaceMessage("Design saved to your catalogue.");
+        } catch (error) {
+            if (uploadedPath) {
+                const { error: cleanupError } = await supabaseClient.storage
+                    .from("tailordesk-order-images")
+                    .remove([uploadedPath]);
+                if (cleanupError) error.message = `${error.message} Uploaded image cleanup also failed: ${cleanupError.message}`;
+            }
+            message.textContent = error.message || "Unable to save this design.";
+        } finally {
+            submit.disabled = false;
+        }
+    }
+
+    async function handleCatalogueAction(event) {
+        const button = event.target.closest("button[data-catalogue-action]");
+        if (!button) return;
+        const design = state.catalogue.find((entry) => entry.id === button.dataset.id);
+        if (!design) return;
+        if (button.dataset.catalogueAction === "edit") {
+            await openCatalogueDialog(design);
+            return;
+        }
+        if (!window.confirm(`Delete “${design.design_name}” from your catalogue?`)) return;
+        button.disabled = true;
+        const { data, error } = await supabaseClient.from("fashion_catalogue")
+            .delete().eq("id", design.id).eq("tailor_id", state.user.id).select("id").maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error("No catalogue design was deleted. Check that you can access this record.");
+        const { error: storageError } = await supabaseClient.storage
+            .from("tailordesk-order-images")
+            .remove([design.image_path]);
+        state.privateImageUrls.delete(design.image_path);
+        await loadWorkspace();
+        setWorkspaceMessage(storageError
+            ? `Design deleted, but its image could not be removed: ${storageError.message}`
+            : "Design deleted from your catalogue.", Boolean(storageError));
+    }
+
+    async function showCatalogueDetails() {
+        const design = state.catalogue[state.catalogueIndex];
+        if (!design) return;
+        document.querySelector("#catalogue-detail-name").textContent = design.design_name;
+        document.querySelector("#catalogue-detail-category").textContent = design.category;
+        document.querySelector("#catalogue-detail-description").textContent = design.description || "No description added.";
+        document.querySelector("#catalogue-detail-price").textContent = formatMoney(design.price);
+        const image = document.querySelector("#catalogue-detail-image");
+        image.src = await getPrivateImageUrl(design.image_path);
+        image.alt = design.design_name;
+        document.querySelector("#catalogue-detail-dialog").showModal();
     }
 
     function appendCell(row, value) {
@@ -1006,7 +2002,11 @@ async function startDashboard() {
                 "edit-measurement-set": "Edit set",
                 "delete-customer": "Delete",
                 "delete-order": "Delete",
-                "delete-measurement": "Delete"
+                "delete-measurement": "Delete",
+                "edit-expense": "Edit",
+                "delete-expense": "Delete",
+                "edit-inventory": "Edit",
+                "delete-inventory": "Delete"
             })[action];
             cell.append(button);
         });
@@ -1026,7 +2026,9 @@ async function startDashboard() {
 
     function formatMoney(value) {
         const amount = Number(value);
-        return `₦${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const safeAmount = Number.isFinite(amount) ? amount : 0;
+        const formattedAmount = Math.abs(safeAmount).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return safeAmount < 0 ? `-₦${formattedAmount}` : `₦${formattedAmount}`;
     }
 
     function formatDate(value) {
@@ -1035,8 +2037,29 @@ async function startDashboard() {
         return Number.isNaN(date.valueOf()) ? String(value) : date.toLocaleDateString();
     }
 
+    function appendWhatsAppAction(parent, phone, message, label) {
+        const digits = String(phone || "").replace(/\D/g, "");
+        const internationalNumber = digits.startsWith("0") ? `234${digits.slice(1)}` : digits;
+        if (internationalNumber.length < 8) return;
+        const link = document.createElement("a");
+        link.className = "action-button whatsapp-action";
+        link.href = `https://wa.me/${internationalNumber}?text=${encodeURIComponent(message)}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = label;
+        parent.append(link);
+    }
+
     function balance(order) {
         return Math.max(0, Number(order.total_amount || 0) - Number(order.amount_paid || 0));
+    }
+
+    function progressStageLabel(order) {
+        const stage = order.progress_stage ||
+            (order.status === "collected" ? "collected"
+                : order.status === "completed" ? "ready_for_collection"
+                    : order.status === "in_progress" ? "sewing_in_progress" : "order_received");
+        return ORDER_PROGRESS_STAGES.find(([value]) => value === stage)?.[1] || "Order received";
     }
 
     function customerOptions() {
@@ -1049,9 +2072,39 @@ async function startDashboard() {
             return [
                 { name: "full_name", label: "Full name", required: true, maxLength: 150 },
                 { name: "phone", label: "Phone number", required: true, maxLength: 40 },
+                { name: "customer_photo", label: "Customer photograph", type: "file", accept: "image/jpeg,image/png,image/webp,image/gif", help: state.customerPhotosAvailable ? "Optional. JPEG, PNG, WebP, or GIF up to 8 MB. Leave blank to keep the current photograph." : "Review customer-photos-migration.sql to enable customer photographs." },
                 { name: "address", label: "Address", type: "textarea" },
                 { name: "notes", label: "General notes", type: "textarea" },
-                { name: "material_received_date", label: "Date material was first received", type: "date", required: true }
+                { name: "material_received_date", label: "Date material was first received (optional)", type: "date" }
+            ];
+        }
+        if (operation.endsWith("expense")) {
+            return [
+                { name: "expense_name", label: "Expense name", required: true, maxLength: 150 },
+                { name: "category", label: "Category", type: "select", required: true, options: [
+                    { value: "transportation", label: "Transportation" },
+                    { value: "electricity", label: "Electricity" },
+                    { value: "rent", label: "Shop rent" },
+                    { value: "materials", label: "Sewing materials" },
+                    { value: "maintenance", label: "Machine maintenance" },
+                    { value: "other", label: "Other" }
+                ] },
+                { name: "amount", label: "Amount (₦)", type: "number", required: true, min: "0.01", step: "0.01" },
+                { name: "expense_date", label: "Date", type: "date", required: true, value: new Date().toISOString().slice(0, 10) },
+                { name: "description", label: "Description", type: "textarea" }
+            ];
+        }
+        if (operation.endsWith("inventory")) {
+            return [
+                { name: "item_name", label: "Item name", required: true, maxLength: 150 },
+                { name: "category", label: "Category", required: true, maxLength: 100, placeholder: "Fabric, thread, buttons..." },
+                { name: "quantity", label: "Quantity", type: "number", required: true, min: "0", step: "0.001" },
+                { name: "unit", label: "Unit", required: true, maxLength: 40, placeholder: "Metres, spools, pieces..." },
+                { name: "purchase_price", label: "Purchase price per item (₦)", type: "number", required: true, min: "0", step: "0.01" },
+                { name: "selling_price", label: "Selling price per item (₦, optional)", type: "number", min: "0", step: "0.01" },
+                { name: "low_stock_threshold", label: "Low-stock threshold", type: "number", required: true, min: "0", step: "0.001", value: "5" },
+                { name: "description", label: "Description", type: "textarea" },
+                { name: "supplier", label: "Supplier", maxLength: 150 }
             ];
         }
         if (operation.endsWith("measurement")) {
@@ -1086,6 +2139,7 @@ async function startDashboard() {
                     { value: "collected", label: "Collected" },
                     { value: "cancelled", label: "Cancelled" }
                 ] },
+                { name: "progress_stage", label: "Sewing progress", type: "select", options: ORDER_PROGRESS_STAGES.map(([value, label]) => ({ value, label })) },
                 { name: "notes", label: "Other order details", type: "textarea" }
             );
             return fields;
@@ -1258,7 +2312,9 @@ async function startDashboard() {
         }
         const recordType = isMeasurementSetOperation ? "measurement" : operation.split("-").at(-1);
         const source = recordType === "customer" ? state.customers
-            : recordType === "measurement" ? state.measurements : state.orders;
+            : recordType === "measurement" ? state.measurements
+                : recordType === "expense" ? state.expenses
+                    : recordType === "inventory" ? state.inventory : state.orders;
         const record = isMeasurementSetOperation
             ? getMeasurementSet(recordId || presetCustomerId || "")
             : recordId ? source.find((item) => item.id === recordId) : null;
@@ -1330,6 +2386,8 @@ async function startDashboard() {
             input.name = field.name;
             if (field.type !== "select" && field.type !== "textarea") input.type = field.type || "text";
             input.required = Boolean(field.required);
+            if (field.name === "customer_photo" && !state.customerPhotosAvailable) input.disabled = true;
+            if (field.name === "progress_stage" && !state.orderProgressAvailable) input.disabled = true;
             if (field.placeholder) input.placeholder = field.placeholder;
             if (field.min !== undefined) input.min = field.min;
             if (field.maxLength !== undefined) input.maxLength = field.maxLength;
@@ -1343,9 +2401,14 @@ async function startDashboard() {
             const legacyValue = field.name === "style_name"
                 ? record?.clothing_style
                 : field.name === "clothing_type" && record ? "Other" : undefined;
-            const value = record?.[field.name] ?? legacyValue ??
+            const legacyProgress = field.name === "progress_stage"
+                ? (record?.status === "collected" ? "collected"
+                    : record?.status === "completed" ? "ready_for_collection"
+                        : record?.status === "in_progress" ? "sewing_in_progress" : "order_received")
+                : undefined;
+            const value = record?.[field.name] ?? legacyProgress ?? legacyValue ??
                 (field.name === "status" ? "pending" : field.value) ??
-                (field.name === "unit" ? "cm" : "");
+                (field.name === "unit" && recordType === "measurement" ? "cm" : "");
             if (input.type !== "file" && value !== null && value !== undefined) input.value = String(value);
             wrapper.append(label, input);
             if (field.help) {
@@ -1479,6 +2542,7 @@ async function startDashboard() {
             ["Paid", formatMoney(order.amount_paid)],
             ["Balance", formatMoney(balance(order))],
             ["Status", order.status],
+            ["Sewing progress", progressStageLabel(order)],
             ["Notes", order.notes || "—"]
         ];
         entries.forEach(([labelText, value]) => {
@@ -1528,11 +2592,33 @@ async function startDashboard() {
         return data.path;
     }
 
+    async function uploadCustomerPhoto(file, tailorId, customerId) {
+        const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        if (!allowedTypes.includes(file.type)) {
+            throw new Error("Choose a JPEG, PNG, WebP, or GIF image.");
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            throw new Error("A customer photograph must be 8 MB or smaller.");
+        }
+        const extension = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" }[file.type];
+        const path = `${tailorId}/customers/${customerId}/${crypto.randomUUID()}.${extension}`;
+        const { data, error } = await supabaseClient.storage
+            .from("tailordesk-order-images")
+            .upload(path, file, { contentType: file.type, upsert: false });
+        if (error) {
+            throw new Error(`Customer photograph upload failed. Verify the private tailordesk-order-images bucket and owner-scoped Storage policies: ${error.message}`);
+        }
+        return data.path;
+    }
+
     async function saveDialogRecord(event) {
         event.preventDefault();
         if (!currentOperation) return;
         const submit = document.querySelector("#dialog-submit");
         let saveWarning = "";
+        let uploadedCustomerPhoto = null;
+        let replacedCustomerPhoto = null;
+        let customerPhotoSaved = false;
         submit.disabled = true;
         document.querySelector("#dialog-message").textContent = "Saving...";
         try {
@@ -1569,34 +2655,87 @@ async function startDashboard() {
                 if (!data) throw new Error("No measurement set was saved. Check that you can access this customer.");
             } else {
                 const table = operation.endsWith("customer") ? "customers"
-                    : operation.endsWith("measurement") ? "measurements" : "orders";
+                    : operation.endsWith("measurement") ? "measurements"
+                        : operation.endsWith("expense") ? "business_expenses"
+                            : operation.endsWith("inventory") ? "inventory_items" : "orders";
                 const tailorId = table === "customers" && !record
                     ? await getVerifiedTailorId()
                     : state.user.id;
                 let payload;
                 if (table === "customers") {
+                    const customerId = record?.id || crypto.randomUUID();
+                    const photoFile = recordForm.elements.customer_photo?.files?.[0];
+                    if (photoFile && !state.customerPhotosAvailable) {
+                        throw new Error("Customer photographs need the reviewed customer-photos-migration.sql schema change before they can be saved.");
+                    }
                     payload = {
+                        id: customerId,
                         full_name: values.full_name.trim(),
                         phone: values.phone.trim(),
                         address: values.address.trim() || null,
                         notes: values.notes.trim() || null,
-                        material_received_date: values.material_received_date || null
+                        material_received_date: values.material_received_date || null,
+                        ...(state.customerPhotosAvailable ? { photo_path: record?.photo_path || null } : {})
                     };
+                    if (photoFile) {
+                        uploadedCustomerPhoto = await uploadCustomerPhoto(photoFile, tailorId, customerId);
+                        replacedCustomerPhoto = record?.photo_path || null;
+                        payload.photo_path = uploadedCustomerPhoto;
+                    }
                 } else if (table === "measurements") {
                     const value = Number(values.measurement_value);
                     if (!Number.isFinite(value) || value <= 0) throw new Error("Measurement value must be a positive number.");
                     payload = { customer_id: values.customer_id, measurement_name: values.measurement_name.trim(), measurement_value: value, unit: measurementUnitCode(values.unit) || "cm" };
+                } else if (table === "business_expenses") {
+                    const amount = Number(values.amount);
+                    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Expense amount must be greater than zero.");
+                    payload = {
+                        expense_name: values.expense_name.trim(),
+                        category: values.category,
+                        amount,
+                        expense_date: values.expense_date,
+                        description: String(values.description || "").trim() || null
+                    };
+                } else if (table === "inventory_items") {
+                    const quantity = Number(values.quantity);
+                    const purchasePrice = Number(values.purchase_price);
+                    const sellingPrice = String(values.selling_price || "").trim();
+                    const lowStockThreshold = Number(values.low_stock_threshold);
+                    if (!Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(purchasePrice) || purchasePrice < 0 ||
+                        (sellingPrice && (!Number.isFinite(Number(sellingPrice)) || Number(sellingPrice) < 0)) ||
+                        !Number.isFinite(lowStockThreshold) || lowStockThreshold < 0) {
+                        throw new Error("Quantity, prices, and low-stock threshold must be zero or greater.");
+                    }
+                    payload = {
+                        item_name: values.item_name.trim(),
+                        category: values.category.trim(),
+                        quantity,
+                        unit: values.unit.trim(),
+                        purchase_price: purchasePrice,
+                        selling_price: sellingPrice ? Number(sellingPrice) : null,
+                        low_stock_threshold: lowStockThreshold,
+                        description: String(values.description || "").trim() || null,
+                        supplier: String(values.supplier || "").trim() || null,
+                        updated_at: new Date().toISOString()
+                    };
                 } else {
                     const clothingType = values.clothing_type.trim();
                     const styleName = values.style_name.trim();
                     const total = Number(values.total_amount);
                     const paid = record ? Number(record.amount_paid || 0) : 0;
                     const status = values.status || "pending";
+                    const progressStage = values.progress_stage || record?.progress_stage ||
+                        (status === "collected" ? "collected"
+                            : status === "completed" ? "ready_for_collection"
+                                : status === "in_progress" ? "sewing_in_progress" : "order_received");
                     if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(paid) || paid < 0 || paid > total) {
                         throw new Error("Enter a positive total price. Amount paid cannot exceed the total price.");
                     }
                     if (!ORDER_STATUSES.includes(status)) {
                         throw new Error("Choose a valid order status.");
+                    }
+                    if (state.orderProgressAvailable && !ORDER_PROGRESS_STAGES.some(([value]) => value === progressStage)) {
+                        throw new Error("Choose a valid sewing progress stage.");
                     }
                     const garmentMeasurements = {};
                     for (const section of MEASUREMENT_SECTIONS) {
@@ -1633,6 +2772,7 @@ async function startDashboard() {
                                     ? { unit: values.garment_measurement_unit === "in" ? "in" : "cm", values: garmentMeasurements }
                                     : null
                             } : {}),
+                            ...(state.orderProgressAvailable ? { progress_stage: progressStage } : {}),
                             status,
                             notes: values.notes.trim() || null,
                             fabric_image_path: record?.fabric_image_path || null,
@@ -1690,6 +2830,16 @@ async function startDashboard() {
                     const { data, error } = await query;
                     if (error) throw error;
                     if (!data) throw new Error("No record was changed. Check that your account can access this record.");
+                    if (table === "customers" && uploadedCustomerPhoto) {
+                        customerPhotoSaved = true;
+                        if (replacedCustomerPhoto) {
+                            const { error: removeError } = await supabaseClient.storage
+                                .from("tailordesk-order-images")
+                                .remove([replacedCustomerPhoto]);
+                            if (removeError) saveWarning = `Customer saved, but the previous photograph could not be removed: ${removeError.message}`;
+                            else state.privateImageUrls.delete(replacedCustomerPhoto);
+                        }
+                    }
                 }
             }
             dialog.close();
@@ -1697,6 +2847,12 @@ async function startDashboard() {
             await loadWorkspace();
             setWorkspaceMessage(saveWarning || "Saved successfully.", Boolean(saveWarning));
         } catch (error) {
+            if (uploadedCustomerPhoto && !customerPhotoSaved) {
+                const { error: cleanupError } = await supabaseClient.storage
+                    .from("tailordesk-order-images")
+                    .remove([uploadedCustomerPhoto]);
+                if (cleanupError) error.message = `${error.message} Uploaded photograph cleanup also failed: ${cleanupError.message}`;
+            }
             document.querySelector("#dialog-message").textContent = error.message || "Unable to save this record.";
             document.querySelector("#dialog-message").style.color = "#a2372b";
         } finally {
@@ -1724,10 +2880,37 @@ async function startDashboard() {
             return;
         }
         const type = action.split("-")[1];
-        const table = type === "customer" ? "customers" : type === "measurement" ? "measurements" : "orders";
-        const record = (type === "customer" ? state.customers : type === "measurement" ? state.measurements : state.orders)
-            .find((item) => item.id === id);
-        const label = type === "customer" ? record?.full_name : type === "measurement" ? record?.measurement_name : record?.clothing_style;
+        const table = type === "customer" ? "customers"
+            : type === "measurement" ? "measurements"
+                : type === "expense" ? "business_expenses"
+                    : type === "inventory" ? "inventory_items" : "orders";
+        const records = type === "customer" ? state.customers
+            : type === "measurement" ? state.measurements
+                : type === "expense" ? state.expenses
+                    : type === "inventory" ? state.inventory : state.orders;
+        const record = records.find((item) => item.id === id);
+        const label = type === "customer" ? record?.full_name
+            : type === "measurement" ? record?.measurement_name
+                : type === "expense" ? record?.expense_name
+                    : type === "inventory" ? record?.item_name : record?.clothing_style;
+        if (type === "customer") {
+            const linkedOrderIds = new Set(state.orders
+                .filter((order) => order.customer_id === id)
+                .map((order) => order.id));
+            const hasHistory = linkedOrderIds.size > 0 ||
+                state.measurements.some((measurement) => measurement.customer_id === id) ||
+                state.measurementSets.some((measurementSet) => measurementSet.customer_id === id) ||
+                state.measurementHistory.some((measurement) => measurement.customer_id === id) ||
+                state.payments.some((payment) => linkedOrderIds.has(payment.order_id));
+            if (hasHistory) {
+                setWorkspaceMessage("This customer has linked business history and cannot be deleted. No records were changed.", true);
+                return;
+            }
+        }
+        if (type === "order" && state.payments.some((payment) => payment.order_id === id)) {
+            setWorkspaceMessage("This order has saved payment history and cannot be deleted. No records were changed.", true);
+            return;
+        }
         if (!window.confirm(`Delete ${label || "this record"}? This cannot be undone.`)) return;
         button.disabled = true;
         let deleteWarning = "";
@@ -1736,6 +2919,13 @@ async function startDashboard() {
                 .delete().eq("id", id).eq("tailor_id", state.user.id).select("id").maybeSingle();
             if (error) throw error;
             if (!data) throw new Error("No record was deleted. Check that your account can access this record.");
+            if (type === "customer" && record?.photo_path) {
+                const { error: storageError } = await supabaseClient.storage
+                    .from("tailordesk-order-images")
+                    .remove([record.photo_path]);
+                state.privateImageUrls.delete(record.photo_path);
+                if (storageError) deleteWarning = `Customer deleted, but their photograph could not be removed: ${storageError.message}`;
+            }
             if (type === "order") {
                 const paths = [record?.fabric_image_path, record?.style_image_path].filter(Boolean);
                 if (paths.length) {

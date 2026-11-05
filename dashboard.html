@@ -19,32 +19,32 @@
     <link rel="icon" href="./images-removebg-preview.png">
    <style>
     :root {
-        --dark: #20251f;
-        --dark-soft: #2b3129;
-        --sidebar-bg: #20251f;
-        --sidebar-text: #ffffff;
-        --gold: #c6a46a;
-        --gold-light: #e2c995;
-        --cream: #f7f6f2;
-        --white: #ffffff;
-        --muted: #777b74;
-        --border: #e9e5dc;
-        --shadow: 0 8px 28px rgba(32, 37, 31, 0.045);
+        --dark: #292820;
+        --dark-soft: #403d32;
+        --sidebar-bg: #292820;
+        --sidebar-text: #fffcf5;
+        --gold: #b08d45;
+        --gold-light: #d0ad69;
+        --cream: #f5f0e6;
+        --white: #fffcf5;
+        --muted: #777365;
+        --border: #e5dccb;
+        --shadow: 0 8px 28px rgba(65, 53, 28, 0.06);
         --radius: 16px;
         color-scheme: light;
     }
 
     :root[data-theme="dark"] {
-        --dark: #f0eee8;
-        --dark-soft: #d6c9aa;
-        --sidebar-bg: #111510;
-        --sidebar-text: #f7f6f2;
-        --gold: #d6b879;
-        --gold-light: #eed8a6;
-        --cream: #171b17;
-        --white: #222822;
-        --muted: #b1b4aa;
-        --border: #3b4239;
+        --dark: #f4efe3;
+        --dark-soft: #ded3b8;
+        --sidebar-bg: #11120f;
+        --sidebar-text: #f4efe3;
+        --gold: #d4af62;
+        --gold-light: #e6cb91;
+        --cream: #191a18;
+        --white: #24251f;
+        --muted: #b7b1a3;
+        --border: #3c3b33;
         --shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
         color-scheme: dark;
     }
@@ -232,6 +232,59 @@
         color: var(--muted);
         font-size: 14px;
         line-height: 1.7;
+    }
+
+    .personalized-greeting {
+        max-width: min(100%, 900px);
+        min-height: 1.15em;
+        margin-bottom: 5px;
+        overflow-wrap: anywhere;
+        color: var(--gold-light);
+        font-family: "Playfair Display", serif;
+        font-size: 40px;
+        font-weight: 700;
+        line-height: 1.15;
+        opacity: 0;
+        text-transform: uppercase;
+        transform: translateX(-14px);
+    }
+
+    .personalized-greeting.is-animating {
+        animation:
+            personalized-greeting-enter var(--greeting-typing-duration) ease-out forwards,
+            personalized-greeting-hold 3000ms linear forwards,
+            personalized-greeting-exit 300ms ease-in forwards;
+        animation-delay:
+            0ms,
+            var(--greeting-typing-duration),
+            calc(var(--greeting-typing-duration) + 3000ms);
+    }
+
+    .personalized-greeting-letter {
+        display: inline-block;
+        opacity: 0;
+    }
+
+    .personalized-greeting.is-animating .personalized-greeting-letter {
+        animation: personalized-greeting-type 90ms steps(1, end) forwards;
+    }
+
+    @keyframes personalized-greeting-enter {
+        from { opacity: 0; transform: translateX(-14px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes personalized-greeting-hold {
+        from, to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes personalized-greeting-exit {
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(-14px); }
+    }
+
+    @keyframes personalized-greeting-type {
+        to { opacity: 1; }
     }
 
     .profile {
@@ -436,6 +489,10 @@
             justify-content: space-between;
         }
 
+        .personalized-greeting {
+            font-size: 26px;
+        }
+
         h1 {
             font-size: clamp(27px, 6vw, 35px);
         }
@@ -505,6 +562,19 @@
         *::after {
             scroll-behavior: auto !important;
             transition-duration: 0.01ms !important;
+        }
+
+        .personalized-greeting,
+        .personalized-greeting.is-animating {
+            opacity: 1;
+            transform: none;
+            animation: none;
+        }
+
+        .personalized-greeting-letter,
+        .personalized-greeting.is-animating .personalized-greeting-letter {
+            opacity: 1;
+            animation: none;
         }
     }
 
@@ -576,6 +646,10 @@
         font-size: 11px;
     }
 
+    a.whatsapp-action {
+        text-decoration: none;
+    }
+
     .action-button.danger {
         color: #a2372b;
     }
@@ -634,6 +708,14 @@
 
     td {
         color: var(--dark);
+    }
+
+    .table-wrap tbody tr.is-low-stock td {
+        background: #fff1e8;
+    }
+
+    :root[data-theme="dark"] .table-wrap tbody tr.is-low-stock td {
+        background: #3a2823;
     }
 
     .table-empty {
@@ -825,6 +907,171 @@
         white-space: pre-wrap;
     }
 
+    .customer-name-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+    }
+
+    .customer-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+        gap: 16px;
+        margin-top: 18px;
+    }
+
+    .customer-card {
+        min-width: 0;
+        padding: 18px;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+    }
+
+    .customer-card-heading {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    .customer-card-photo,
+    .customer-card-initials {
+        display: grid;
+        place-items: center;
+        width: 72px;
+        height: 72px;
+        flex: 0 0 72px;
+        object-fit: cover;
+        color: var(--gold);
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        font-size: 22px;
+        font-weight: 700;
+    }
+
+    .customer-card-identity {
+        min-width: 0;
+    }
+
+    .customer-card-identity h3 {
+        overflow-wrap: anywhere;
+        color: var(--dark);
+        font-family: "Playfair Display", serif;
+        font-size: 20px;
+        line-height: 1.3;
+    }
+
+    .customer-card-meta {
+        display: grid;
+        gap: 7px;
+        margin-top: 14px;
+    }
+
+    .customer-card-meta p {
+        overflow-wrap: anywhere;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    .customer-card-meta strong {
+        color: var(--dark);
+        font-weight: 600;
+    }
+
+    .customer-card-measurements {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+    }
+
+    .customer-card-measurements summary {
+        color: var(--dark);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .customer-card-measurement-content {
+        display: grid;
+        gap: 12px;
+        padding-top: 12px;
+    }
+
+    .customer-card-measurement-group h4 {
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .customer-card-measurement-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr));
+        column-gap: 12px;
+    }
+
+    .customer-card-measurement {
+        display: grid;
+        gap: 3px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+    }
+
+    .customer-card-measurement strong {
+        color: var(--dark);
+        font-weight: 600;
+    }
+
+    .customer-card-measurement span,
+    .customer-card-no-measurements {
+        color: var(--muted);
+        font-size: 12px;
+    }
+
+    .customer-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+    }
+
+    .customer-avatar {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        object-fit: cover;
+        color: var(--gold);
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .customer-avatar-initial {
+        display: inline-grid;
+    }
+
+    .customer-profile-photo {
+        display: block;
+        width: 128px;
+        height: 128px;
+        object-fit: cover;
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+
     .profile-columns {
         display: grid;
         gap: 26px;
@@ -896,6 +1143,8 @@
     .garment-payment h5 { margin-bottom: 8px; font-size: 12px; }
     .garment-payment-history { margin: 0 0 12px; padding-left: 18px; color: var(--muted); font-size: 11px; }
     .garment-payment-history li + li { margin-top: 4px; }
+    .garment-payment-history li { padding-left: 3px; }
+    .garment-payment-history li .action-button { margin-left: 8px; }
 
     .inline-payment-form {
         display: grid;
@@ -981,6 +1230,501 @@
         font-weight: 700;
     }
 
+    .collection-list {
+        display: grid;
+        gap: 0;
+        list-style: none;
+    }
+
+    .collection-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .collection-details {
+        min-width: 0;
+    }
+
+    .collection-details strong,
+    .collection-details span {
+        display: block;
+        overflow-wrap: anywhere;
+    }
+
+    .collection-details strong {
+        font-size: 13px;
+    }
+
+    .collection-details span,
+    .collection-date {
+        color: var(--muted);
+        font-size: 11px;
+    }
+
+    .collection-date {
+        flex: 0 0 auto;
+        text-align: right;
+    }
+
+    .collection-date.is-overdue {
+        color: #a2372b;
+        font-weight: 700;
+    }
+
+    .notification-count {
+        display: inline-grid;
+        place-items: center;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 6px;
+        color: var(--dark);
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-family: "DM Sans", sans-serif;
+        font-size: 11px;
+        vertical-align: middle;
+    }
+
+    .notification-list {
+        display: grid;
+        list-style: none;
+    }
+
+    .notification-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .notification-list li.is-read {
+        opacity: 0.62;
+    }
+
+    .notification-copy {
+        min-width: 0;
+    }
+
+    .notification-copy strong,
+    .notification-copy span {
+        display: block;
+        overflow-wrap: anywhere;
+    }
+
+    .notification-copy strong { font-size: 12px; }
+    .notification-copy span { color: var(--muted); font-size: 11px; }
+
+    .business-ops-message {
+        margin: 0 0 16px;
+        color: #8a5a22;
+        font-size: 12px;
+    }
+
+    .business-ops-message:empty { display: none; }
+
+    .operations-summary {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+    }
+
+    .operations-summary strong {
+        color: var(--dark);
+        font-family: "Playfair Display", serif;
+        font-size: 21px;
+    }
+
+    .report-filters {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        max-width: 520px;
+        margin-bottom: 20px;
+    }
+
+    .report-filters .dialog-field span {
+        color: var(--dark);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .report-filters input {
+        min-height: 42px;
+        padding: 9px 12px;
+        color: var(--dark);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+    }
+
+    .report-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        margin: 20px 0;
+    }
+
+    .report-summary article {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+    }
+
+    .report-summary span { color: var(--muted); font-size: 11px; }
+    .report-summary strong { color: var(--dark); font-family: "Playfair Display", serif; font-size: 20px; overflow-wrap: anywhere; }
+
+    :root[data-theme="dark"] .collection-date.is-overdue {
+        color: #ef9a8d;
+    }
+
+    .catalogue-empty {
+        display: grid;
+        justify-items: start;
+        gap: 10px;
+        padding: 28px;
+        background: var(--cream);
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+    }
+
+    .catalogue-empty-mark {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        aspect-ratio: 1;
+        color: var(--gold);
+        background: var(--white);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+    }
+
+    .catalogue-empty h3,
+    .catalogue-caption h3 {
+        font-family: "Playfair Display", serif;
+        font-size: 22px;
+    }
+
+    .catalogue-empty p,
+    .catalogue-caption p {
+        max-width: 560px;
+        color: var(--muted);
+        font-size: 12px;
+    }
+
+    .catalogue-showcase {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
+        gap: 22px;
+        align-items: center;
+    }
+
+    .catalogue-image-button {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        padding: 0;
+        overflow: hidden;
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        cursor: zoom-in;
+    }
+
+    .catalogue-image-button img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: opacity 0.3s ease;
+    }
+
+    .catalogue-caption {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        min-width: 0;
+        gap: 12px;
+    }
+
+    .catalogue-caption h3 {
+        margin: 4px 0 7px;
+        overflow-wrap: anywhere;
+    }
+
+    .catalogue-caption > strong {
+        color: var(--gold);
+        font-size: 14px;
+    }
+
+    .catalogue-category {
+        color: var(--gold) !important;
+        font-size: 10px !important;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .catalogue-controls {
+        display: flex;
+        grid-column: 1 / -1;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    .catalogue-controls .action-button {
+        width: 36px;
+        height: 36px;
+        margin: 0;
+        padding: 0;
+        font-size: 22px;
+        line-height: 1;
+    }
+
+    .catalogue-indicators {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-width: 28px;
+    }
+
+    .catalogue-indicators button {
+        width: 8px;
+        height: 8px;
+        padding: 0;
+        background: var(--border);
+        border: 0;
+        border-radius: 50%;
+    }
+
+    .catalogue-indicators button[aria-current="true"] {
+        background: var(--gold);
+    }
+
+    .catalogue-management {
+        display: grid;
+        gap: 8px;
+        margin-top: 20px;
+    }
+
+    .catalogue-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+        border-top: 1px solid var(--border);
+    }
+
+    .catalogue-item img {
+        width: 48px;
+        height: 48px;
+        flex: 0 0 auto;
+        object-fit: cover;
+        background: var(--cream);
+        border-radius: 6px;
+    }
+
+    .catalogue-item-details {
+        min-width: 0;
+        margin-right: auto;
+    }
+
+    .catalogue-item-details strong,
+    .catalogue-item-details span {
+        display: block;
+        overflow-wrap: anywhere;
+    }
+
+    .catalogue-item-details strong {
+        font-size: 12px;
+    }
+
+    .catalogue-item-details span {
+        color: var(--muted);
+        font-size: 10px;
+    }
+
+    .catalogue-detail-image {
+        display: block;
+        width: 100%;
+        max-height: 55vh;
+        margin-bottom: 14px;
+        object-fit: contain;
+        background: var(--cream);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+    }
+
+    .catalogue-detail-description {
+        margin: 8px 0 14px;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: pre-wrap;
+    }
+
+    #catalogue-detail-price {
+        color: var(--gold);
+    }
+
+    .print-receipt {
+        display: none;
+        width: min(720px, 100%);
+        margin: 0 auto;
+        padding: 38px;
+        color: #292820;
+        background: #fffcf5;
+        font-family: "DM Sans", sans-serif;
+    }
+
+    .receipt-header,
+    .receipt-parties,
+    .receipt-item dl > div {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+    }
+
+    .receipt-header h1 {
+        margin: 5px 0;
+        font-family: "Playfair Display", serif;
+        font-size: 30px;
+    }
+
+    .receipt-header p,
+    .receipt-parties dd,
+    .receipt-item p,
+    .receipt-item dd {
+        overflow-wrap: anywhere;
+        font-size: 12px;
+    }
+
+    .receipt-eyebrow,
+    .receipt-number span,
+    .receipt-parties dt,
+    .receipt-item dt {
+        color: #777365;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .receipt-number {
+        display: grid;
+        justify-items: end;
+        align-content: start;
+        gap: 5px;
+    }
+
+    .receipt-rule {
+        height: 2px;
+        margin: 24px 0;
+        background: #b08d45;
+    }
+
+    .receipt-parties {
+        margin-bottom: 28px;
+    }
+
+    .receipt-parties div,
+    .receipt-item dl > div {
+        display: grid;
+        gap: 5px;
+    }
+
+    .receipt-item h2 {
+        margin-bottom: 10px;
+        font-family: "Playfair Display", serif;
+        font-size: 20px;
+    }
+
+    .receipt-item > p {
+        margin-bottom: 18px;
+        font-weight: 600;
+    }
+
+    .receipt-item dl {
+        display: grid;
+        gap: 10px;
+    }
+
+    .receipt-item dl > div {
+        grid-template-columns: 1fr auto;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e5dccb;
+    }
+
+    .receipt-item dd {
+        font-weight: 600;
+        text-align: right;
+    }
+
+    .receipt-footer {
+        margin-top: 30px;
+        padding-top: 15px;
+        border-top: 1px solid #e5dccb;
+        color: #777365;
+        font-size: 11px;
+        text-align: center;
+    }
+
+    .receipt-close {
+        margin-top: 20px;
+    }
+
+    body.printing-receipt #print-receipt {
+        display: block;
+        position: fixed;
+        inset: 20px;
+        z-index: 20;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 20px 70px rgba(0, 0, 0, 0.22);
+    }
+
+    @media print {
+        @page { margin: 16mm; }
+        body.printing-receipt {
+            background: #ffffff;
+            color: #292820;
+        }
+        body.printing-receipt > *:not(#print-receipt) {
+            display: none !important;
+        }
+        body.printing-receipt #print-receipt {
+            display: block !important;
+            position: static;
+            inset: auto;
+            width: 100%;
+            max-height: none;
+            overflow: visible;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+        body.printing-receipt .receipt-close {
+            display: none !important;
+        }
+    }
+
     @media (max-width: 800px) {
         .sidebar nav {
             display: flex;
@@ -1005,6 +1749,10 @@
 
         .inline-payment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .inline-payment-form .primary-button { width: 100%; }
+        .catalogue-showcase { grid-template-columns: minmax(0, 1fr); }
+        .catalogue-controls { grid-column: 1; flex-wrap: wrap; }
+        .catalogue-item { flex-wrap: wrap; }
+        .report-filters { grid-template-columns: minmax(0, 1fr); }
     }
 </style>
 
@@ -1017,8 +1765,9 @@
         <nav aria-label="Workspace">
             <a href="#overview" class="nav-item" data-view="overview">Overview</a>
             <a href="#customers" class="nav-item" data-view="customers">Customer Book</a>
-            <a href="#measurements" class="nav-item" data-view="measurements">Measurements</a>
-            <a href="#payments" class="nav-item" data-view="payments">Payments &amp; Balances</a>
+            <a href="#expenses" class="nav-item" data-view="expenses">Expenses</a>
+            <a href="#inventory" class="nav-item" data-view="inventory">Inventory</a>
+            <a href="#reports" class="nav-item" data-view="reports">Reports</a>
             <a href="#settings" class="nav-item" data-view="settings">Settings</a>
         </nav>
         <button class="logout" id="logout-button" type="button">Sign Out ↗</button>
@@ -1027,6 +1776,7 @@
     <main class="main">
         <header class="topbar">
             <div>
+                <p class="personalized-greeting" id="personalized-greeting" aria-live="off"></p>
                 <h1 id="page-title">Welcome to TailorDesk<span class="gold">.</span></h1>
                 <p class="subtitle" id="page-subtitle">Your tailoring business, organised in one place.</p>
             </div>
@@ -1047,8 +1797,16 @@
                     <p class="card-number" id="stat-customers">—</p>
                 </article>
                 <article class="card">
-                    <p class="card-label">Active Orders</p>
+                    <p class="card-label">Total Orders</p>
                     <p class="card-number" id="stat-orders">—</p>
+                </article>
+                <article class="card">
+                    <p class="card-label">Pending Orders</p>
+                    <p class="card-number" id="stat-pending">—</p>
+                </article>
+                <article class="card">
+                    <p class="card-label">In Progress</p>
+                    <p class="card-number" id="stat-in-progress">—</p>
                 </article>
                 <article class="card">
                     <p class="card-label">Ready for Collection</p>
@@ -1062,16 +1820,73 @@
                     <p class="card-label">Outstanding Balances</p>
                     <p class="card-number" id="stat-balance">—</p>
                 </article>
+                <article class="card">
+                    <p class="card-label">Payments Received</p>
+                    <p class="card-number" id="stat-payments">—</p>
+                </article>
             </div>
+            <section class="section fashion-section">
+                <div class="section-heading">
+                    <div><h2>Fashion Catalogue</h2><p class="subtitle">Your designs, ready to revisit and share.</p></div>
+                    <button class="secondary-button" id="catalogue-add-design" type="button">Add design</button>
+                </div>
+                <p id="catalogue-message" class="inline-notice" role="status" aria-live="polite"></p>
+                <div class="catalogue-empty" id="catalogue-empty" hidden>
+                    <div class="catalogue-empty-mark" aria-hidden="true">✂</div>
+                    <h3>Your catalogue begins here</h3>
+                    <p>Add a design image to build a private visual reference library for your business.</p>
+                    <button class="primary-button" id="catalogue-add-first" type="button">Add your first design</button>
+                </div>
+                <div class="catalogue-showcase" id="catalogue-showcase" hidden>
+                    <button class="catalogue-image-button" id="catalogue-view-design" type="button" aria-label="View design details">
+                        <img id="catalogue-image" alt="">
+                    </button>
+                    <div class="catalogue-caption">
+                        <div>
+                            <p class="catalogue-category" id="catalogue-category"></p>
+                            <h3 id="catalogue-name"></h3>
+                            <p id="catalogue-description"></p>
+                        </div>
+                        <strong id="catalogue-price"></strong>
+                    </div>
+                    <div class="catalogue-controls">
+                        <button class="action-button" id="catalogue-previous" type="button" aria-label="Previous design" title="Previous design">‹</button>
+                        <div class="catalogue-indicators" id="catalogue-indicators" aria-label="Choose a design"></div>
+                        <button class="action-button" id="catalogue-next" type="button" aria-label="Next design" title="Next design">›</button>
+                        <button class="secondary-button" id="catalogue-pause" type="button" aria-pressed="false">Pause slideshow</button>
+                    </div>
+                </div>
+                <div class="catalogue-management" id="catalogue-management"></div>
+            </section>
             <section class="section">
                 <div class="section-heading"><h2>Recent orders</h2><button class="primary-button" type="button" data-action="go-customers">Open customer notebook</button></div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Customer</th><th>Style</th><th>Order date</th><th>Collection</th><th>Status</th></tr></thead>
+                        <thead><tr><th>Customer</th><th>Style</th><th>Order date</th><th>Collection</th><th>Status</th><th>Progress</th></tr></thead>
                         <tbody id="recent-orders"></tbody>
                     </table>
                 </div>
                 <p class="empty table-empty" id="recent-orders-empty">No orders yet. Add clothing from a customer profile.</p>
+            </section>
+            <section class="section">
+                <div class="section-heading"><h2>Recent customers</h2><button class="secondary-button" type="button" data-action="go-customers">Open customer records</button></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Customer</th><th>Phone</th><th>Registered</th></tr></thead>
+                        <tbody id="recent-customers"></tbody>
+                    </table>
+                </div>
+                <p class="empty table-empty" id="recent-customers-empty">No customers have been added yet.</p>
+            </section>
+            <section class="section">
+                <div class="section-heading"><h2>Upcoming collections</h2></div>
+                <ul class="collection-list" id="collection-reminders"></ul>
+                <p class="empty table-empty" id="collection-reminders-empty">No collection dates are scheduled.</p>
+            </section>
+            <section class="section">
+                <div class="section-heading"><h2>Notifications <span class="notification-count" id="notification-count">0</span></h2></div>
+                <ul class="notification-list" id="notification-list"></ul>
+                <p class="empty table-empty" id="notification-empty">You are up to date.</p>
             </section>
         </section>
 
@@ -1080,10 +1895,7 @@
                 <div class="section-heading"><h2>Customer records</h2><button class="primary-button" type="button" data-action="add-customer">Add customer</button></div>
                 <label class="search-label" for="customer-search">Search by name or phone</label>
                 <input class="search-input" id="customer-search" type="search" placeholder="Search customers">
-                <div class="table-wrap"><table>
-                    <thead><tr><th>Name</th><th>Phone</th><th>Address</th><th>Date registered</th><th>Notes</th><th>Actions</th></tr></thead>
-                    <tbody id="customers-table"></tbody>
-                </table></div>
+                <div class="customer-card-grid" id="customer-cards"></div>
                 <p class="empty table-empty" id="customers-empty">No customers found.</p>
             </section>
             <section class="section customer-profile" id="customer-profile" hidden>
@@ -1115,6 +1927,14 @@
                         <p class="empty table-empty" id="profile-measurements-empty">No previous customer measurements.</p>
                         </div>
                     </details>
+                    <details class="legacy-measurements-section" id="profile-measurement-history-section">
+                        <summary>Dated measurement history</summary>
+                        <div class="legacy-measurements-content">
+                            <p class="subtitle" id="profile-measurement-history-note">Previous customer measurement sets are kept when a set is updated.</p>
+                            <div class="table-wrap"><table><thead><tr><th>Recorded</th><th>Unit</th><th>Saved measurements</th><th>Fitting notes</th></tr></thead><tbody id="profile-measurement-history"></tbody></table></div>
+                            <p class="empty table-empty" id="profile-measurement-history-empty">No earlier measurement versions are available.</p>
+                        </div>
+                    </details>
                 </div>
             </section>
         </section>
@@ -1138,6 +1958,45 @@
             </section>
         </section>
 
+        <section class="view-panel" id="view-expenses" data-title="Expenses" data-subtitle="Track actual business spending by date and category." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Recorded expenses</h2><button class="primary-button" type="button" data-action="add-expense">Add expense</button></div>
+                <p class="business-ops-message" id="expenses-message" role="status" aria-live="polite"></p>
+                <div class="operations-summary"><span>Total recorded expenses</span><strong id="expenses-total">—</strong></div>
+                <div class="table-wrap"><table><thead><tr><th>Date</th><th>Expense</th><th>Category</th><th>Amount</th><th>Description</th><th>Actions</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
+                <p class="empty table-empty" id="expenses-empty">No expenses have been recorded yet.</p>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-inventory" data-title="Inventory" data-subtitle="Keep material and supply quantities current without automatic deductions." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Materials and supplies</h2><button class="primary-button" type="button" data-action="add-inventory">Add item</button></div>
+                <p class="business-ops-message" id="inventory-message" role="status" aria-live="polite"></p>
+                <div class="operations-summary"><span>Items at or below low stock (5 units)</span><strong id="inventory-low-stock">—</strong></div>
+                <div class="table-wrap"><table><thead><tr><th>Item</th><th>Category</th><th>Quantity</th><th>Unit</th><th>Purchase price</th><th>Selling price</th><th>Low-stock threshold</th><th>Date added</th><th>Description</th><th>Supplier</th><th>Actions</th></tr></thead><tbody id="inventory-table"></tbody></table></div>
+                <p class="empty table-empty" id="inventory-empty">No inventory items have been added.</p>
+            </section>
+        </section>
+
+        <section class="view-panel" id="view-reports" data-title="Reports" data-subtitle="Review recorded income and expenses for a selected period." hidden>
+            <section class="section">
+                <div class="section-heading"><h2>Business summary</h2></div>
+                <div class="report-filters">
+                    <label class="dialog-field"><span>From</span><input id="report-start-date" type="date"></label>
+                    <label class="dialog-field"><span>To</span><input id="report-end-date" type="date"></label>
+                </div>
+                <p class="business-ops-message" id="reports-message" role="status" aria-live="polite"></p>
+                <div class="report-summary">
+                    <article><span>Payments received</span><strong id="report-income">—</strong></article>
+                    <article><span>Expenses recorded</span><strong id="report-expenses">—</strong></article>
+                    <article><span>Estimated profit</span><strong id="report-profit">—</strong></article>
+                    <article><span>Completed orders</span><strong id="report-completed">—</strong></article>
+                    <article><span>Outstanding balances</span><strong id="report-outstanding">—</strong></article>
+                </div>
+                <p class="subtitle">Income includes saved payment records only. Unpaid order balances are not counted as income.</p>
+            </section>
+        </section>
+
         <section class="view-panel" id="view-settings" data-title="Settings" data-subtitle="Manage your tailor profile and business name." hidden>
             <section class="section">
                 <div class="section-heading"><h2>Business profile</h2></div>
@@ -1150,6 +2009,10 @@
                         <div class="dialog-field">
                             <label for="settings-shop-name">Business name</label>
                             <input id="settings-shop-name" name="shop_name" type="text" autocomplete="organization" required>
+                        </div>
+                        <div class="dialog-field">
+                            <label for="settings-business-phone">Business phone</label>
+                            <input id="settings-business-phone" name="business_phone" type="tel" autocomplete="tel" maxlength="40">
                         </div>
                         <div class="dialog-field">
                             <label for="settings-email">Account email</label>
@@ -1170,6 +2033,55 @@
             <div class="dialog-actions"><button type="button" class="secondary-button" id="dialog-cancel">Cancel</button><button type="submit" class="primary-button" id="dialog-submit">Save</button></div>
         </form>
     </dialog>
+
+    <dialog id="catalogue-dialog" class="record-dialog">
+        <form id="catalogue-form">
+            <div class="section-heading"><h2 id="catalogue-dialog-title">Add design</h2><button type="button" class="close-button" id="catalogue-dialog-close" aria-label="Close">×</button></div>
+            <div class="dialog-fields">
+                <div class="dialog-field"><label for="catalogue-design-name">Design name</label><input id="catalogue-design-name" name="design_name" maxlength="150" required></div>
+                <div class="dialog-field"><label for="catalogue-category-input">Category</label><input id="catalogue-category-input" name="category" maxlength="100" placeholder="e.g. Occasion wear" required></div>
+                <div class="dialog-field"><label for="catalogue-description-input">Description</label><textarea id="catalogue-description-input" name="description" rows="3"></textarea></div>
+                <div class="dialog-field"><label for="catalogue-price-input">Price (₦)</label><input id="catalogue-price-input" name="price" type="number" min="0" step="0.01" value="0" required></div>
+                <div class="dialog-field"><label for="catalogue-image-input">Design photograph</label><input id="catalogue-image-input" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><span class="upload-help">JPEG, PNG, WebP, or GIF. Maximum 8 MB.</span></div>
+            </div>
+            <p id="catalogue-dialog-message" class="inline-notice" role="status" aria-live="polite"></p>
+            <div class="dialog-actions"><button type="button" class="secondary-button" id="catalogue-dialog-cancel">Cancel</button><button type="submit" class="primary-button" id="catalogue-dialog-submit">Save design</button></div>
+        </form>
+    </dialog>
+
+    <dialog id="catalogue-detail-dialog" class="record-dialog">
+        <div class="section-heading"><h2 id="catalogue-detail-name">Design</h2><button type="button" class="close-button" id="catalogue-detail-close" aria-label="Close">×</button></div>
+        <img class="catalogue-detail-image" id="catalogue-detail-image" alt="">
+        <p class="catalogue-category" id="catalogue-detail-category"></p>
+        <p class="catalogue-detail-description" id="catalogue-detail-description"></p>
+        <strong id="catalogue-detail-price"></strong>
+    </dialog>
+
+    <article id="print-receipt" class="print-receipt" hidden aria-label="Payment receipt">
+        <header class="receipt-header">
+            <div><p class="receipt-eyebrow">PAYMENT RECEIPT</p><h1 id="receipt-business-name">TailorDesk</h1><p id="receipt-business-contact"></p></div>
+            <div class="receipt-number"><span>Receipt</span><strong id="receipt-number"></strong></div>
+        </header>
+        <div class="receipt-rule"></div>
+        <dl class="receipt-parties">
+            <div><dt>Received from</dt><dd id="receipt-customer-name"></dd><dd id="receipt-customer-phone"></dd></div>
+            <div><dt>Payment date</dt><dd id="receipt-payment-date"></dd></div>
+        </dl>
+        <section class="receipt-item">
+            <h2>Payment details</h2>
+            <p id="receipt-garment"></p>
+            <dl>
+                <div><dt>Total sewing cost</dt><dd id="receipt-total"></dd></div>
+                <div><dt>Previously paid</dt><dd id="receipt-previous"></dd></div>
+                <div><dt>Current payment</dt><dd id="receipt-current"></dd></div>
+                <div><dt>Total paid to date</dt><dd id="receipt-paid-total"></dd></div>
+                <div><dt>Outstanding balance</dt><dd id="receipt-balance"></dd></div>
+                <div><dt>Payment method</dt><dd id="receipt-method"></dd></div>
+            </dl>
+        </section>
+        <footer class="receipt-footer">Thank you for choosing <span id="receipt-footer-business">TailorDesk</span>.</footer>
+        <button id="receipt-close" class="secondary-button receipt-close" type="button">Close receipt</button>
+    </article>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js" defer></script>
